@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\RebootOltOnuRequest;
 use App\Http\Requests\StoreOltConnectionRequest;
 use App\Http\Requests\UpdateOltConnectionRequest;
 use App\Models\OltConnection;
@@ -161,6 +162,36 @@ class OltSettingsController extends Controller
             return redirect()
                 ->route('super-admin.settings.olt.index', ['connection' => $oltConnection->id])
                 ->with('error', 'Polling OLT gagal: '.$throwable->getMessage());
+        }
+    }
+
+    public function rebootOnu(
+        OltConnection $oltConnection,
+        RebootOltOnuRequest $request,
+        HsgqSnmpCollector $collector,
+    ): RedirectResponse {
+        $onuIndex = (string) $request->validated('onu_index');
+
+        $onuExists = $oltConnection->onuOptics()
+            ->where('onu_index', $onuIndex)
+            ->exists();
+
+        if (! $onuExists) {
+            return redirect()
+                ->route('super-admin.settings.olt.index', ['connection' => $oltConnection->id])
+                ->with('error', 'ONU tidak ditemukan pada data OLT ini.');
+        }
+
+        try {
+            $collector->rebootOnu($oltConnection, $onuIndex);
+
+            return redirect()
+                ->route('super-admin.settings.olt.index', ['connection' => $oltConnection->id])
+                ->with('success', 'Perintah reboot ONU berhasil dikirim ke OLT.');
+        } catch (Throwable $throwable) {
+            return redirect()
+                ->route('super-admin.settings.olt.index', ['connection' => $oltConnection->id])
+                ->with('error', 'Reboot ONU gagal: '.$throwable->getMessage());
         }
     }
 

@@ -154,6 +154,44 @@ class HsgqSnmpCollector
         return $rows;
     }
 
+    public function rebootOnu(OltConnection $oltConnection, string $onuIndex): void
+    {
+        $snmpWriteCommunity = trim((string) $oltConnection->snmp_write_community);
+
+        if ($snmpWriteCommunity === '') {
+            throw new RuntimeException('SNMP Write Community belum diisi pada konfigurasi OLT.');
+        }
+
+        $rebootBaseOid = $this->normalizeOid($oltConnection->oid_reboot_onu);
+
+        if ($rebootBaseOid === null) {
+            throw new RuntimeException('OID reboot ONU belum diisi pada konfigurasi OLT.');
+        }
+
+        $normalizedOnuIndex = trim($onuIndex);
+
+        if ($normalizedOnuIndex === '' || preg_match('/^[0-9]+(?:\.[0-9]+)*$/', $normalizedOnuIndex) !== 1) {
+            throw new RuntimeException('ONU index tidak valid.');
+        }
+
+        $command = sprintf(
+            'snmpset -On -v2c -c %s -t %d -r %d %s %s i %d',
+            escapeshellarg($snmpWriteCommunity),
+            (int) $oltConnection->snmp_timeout,
+            (int) $oltConnection->snmp_retries,
+            escapeshellarg((string) $oltConnection->host.':'.(int) $oltConnection->snmp_port),
+            escapeshellarg('.'.$rebootBaseOid.'.'.$normalizedOnuIndex),
+            1,
+        );
+
+        $result = Process::run($command);
+
+        if ($result->failed()) {
+            $message = trim($result->errorOutput() ?: $result->output());
+            throw new RuntimeException($this->normalizeSnmpSetFailureMessage($message));
+        }
+    }
+
     private function buildSnmpGetCommand(OltConnection $oltConnection, string $oid): string
     {
         return sprintf(
@@ -380,6 +418,37 @@ class HsgqSnmpCollector
             '2', 'offline', 'down', 'false' => 'offline',
             default => $normalized !== '' ? $normalized : null,
         };
+    }
+
+    private function normalizeOid(?string $oid): ?string
+    {
+        $normalized = trim((string) $oid);
+        $normalized = ltrim($normalized, '.');
+
+        return $normalized !== '' ? $normalized : null;
+    }
+
+    private function normalizeSnmpSetFailureMessage(string $message): string
+    {
+        $normalizedMessage = strtolower($message);
+
+        if (
+            str_contains($normalizedMessage, 'timed out')
+            || str_contains($normalizedMessage, 'timeout')
+            || str_contains($normalizedMessage, 'no response')
+        ) {
+            return 'SNMP timeout ke OLT saat reboot ONU.';
+        }
+
+        if (str_contains($normalizedMessage, 'wrongvalue') || str_contains($normalizedMessage, 'wrong value')) {
+            return 'Reboot ONU tidak didukung oleh OLT ini. Periksa OID reboot ONU.';
+        }
+
+        if (str_contains($normalizedMessage, 'generror') || str_contains($normalizedMessage, 'general failure')) {
+            return 'OLT menolak perintah reboot ONU.';
+        }
+
+        return 'SNMP set gagal: '.$message;
     }
 
     /**

@@ -173,3 +173,54 @@ it('polls olt optics and stores the latest onu data', function () {
         ->and(OltOnuOptic::query()->where('olt_connection_id', $connection->id)->count())->toBe(1)
         ->and(OltOnuOptic::query()->where('olt_connection_id', $connection->id)->value('pon_interface'))->toBe('PON1');
 });
+
+it('reboots an onu from the stored olt data', function () {
+    $user = User::factory()->superAdmin()->create();
+    $connection = OltConnection::factory()->create([
+        'host' => '10.10.10.1',
+        'snmp_write_community' => 'private',
+        'oid_reboot_onu' => '1.3.6.1.4.1.5875.800.3.1.1.1.1.19',
+    ]);
+
+    OltOnuOptic::factory()->create([
+        'olt_connection_id' => $connection->id,
+        'onu_index' => '16777473',
+    ]);
+
+    Process::fake([
+        '*' => Process::result('.1.3.6.1.4.1.5875.800.3.1.1.1.1.19.16777473 = INTEGER: 1', '', 0),
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('super-admin.settings.olt.onu-reboot', $connection), [
+            'onu_index' => '16777473',
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    Process::assertRan(function ($process): bool {
+        return str_contains($process->command, 'snmpset -On -v2c -c')
+            && str_contains($process->command, '.1.3.6.1.4.1.5875.800.3.1.1.1.1.19.16777473')
+            && str_contains($process->command, ' i 1');
+    });
+});
+
+it('surfaces a reboot error when write community is missing', function () {
+    $user = User::factory()->superAdmin()->create();
+    $connection = OltConnection::factory()->create([
+        'snmp_write_community' => null,
+        'oid_reboot_onu' => '1.3.6.1.4.1.5875.800.3.1.1.1.1.19',
+    ]);
+
+    OltOnuOptic::factory()->create([
+        'olt_connection_id' => $connection->id,
+        'onu_index' => '16777473',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('super-admin.settings.olt.onu-reboot', $connection), [
+            'onu_index' => '16777473',
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('error');
+});

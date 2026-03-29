@@ -62,6 +62,13 @@
                             <label for="snmp_write_community">Write Community</label>
                             <input type="text" id="snmp_write_community" name="snmp_write_community" class="form-control" value="{{ old('snmp_write_community') }}">
                         </div>
+                        <div class="form-group col-md-3">
+                            <label for="oid_reboot_onu">OID Reboot ONU</label>
+                            <input type="text" id="oid_reboot_onu" name="oid_reboot_onu" class="form-control @error('oid_reboot_onu') is-invalid @enderror" value="{{ old('oid_reboot_onu') }}">
+                            @error('oid_reboot_onu')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
                         <div class="form-group col-md-2">
                             <label for="snmp_timeout">Timeout</label>
                             <input type="number" id="snmp_timeout" name="snmp_timeout" class="form-control" value="{{ old('snmp_timeout', 5) }}">
@@ -167,6 +174,10 @@
                                             <input type="text" name="oid_status" class="form-control" value="{{ $connection->oid_status }}">
                                         </div>
                                         <div class="form-group col-md-2">
+                                            <label>OID Reboot ONU</label>
+                                            <input type="text" name="oid_reboot_onu" class="form-control" value="{{ $connection->oid_reboot_onu }}">
+                                        </div>
+                                        <div class="form-group col-md-2">
                                             <label>Write Community</label>
                                             <input type="text" name="snmp_write_community" class="form-control" value="{{ $connection->snmp_write_community }}">
                                         </div>
@@ -267,6 +278,7 @@
                                         <th>Distance</th>
                                         <th>Rx ONU</th>
                                         <th>Status</th>
+                                        <th class="text-right">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -282,6 +294,13 @@
                                                 <span class="badge {{ $onu->status === 'online' ? 'badge-success' : 'badge-secondary' }}">
                                                     {{ $onu->status ?? '-' }}
                                                 </span>
+                                            </td>
+                                            <td class="text-right">
+                                                <form action="{{ route('super-admin.settings.olt.onu-reboot', $selectedConnection) }}" method="POST" class="mb-0" onsubmit="return confirm('Kirim reboot ke ONU ini?');">
+                                                    @csrf
+                                                    <input type="hidden" name="onu_index" value="{{ $onu->onu_index }}">
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm">Reboot ONU</button>
+                                                </form>
                                             </td>
                                         </tr>
                                     @endforeach

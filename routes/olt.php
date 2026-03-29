@@ -15,4 +15,5 @@ Route::middleware(['auth', 'system.license', 'system.feature:olt', SuperAdminMid
         Route::post('/connections/{oltConnection}/detect-model', [OltSettingsController::class, 'autoDetectModel'])->name('detect-model');
         Route::post('/connections/{oltConnection}/detect-oid', [OltSettingsController::class, 'autoDetectOid'])->name('detect-oid');
         Route::post('/connections/{oltConnection}/poll', [OltSettingsController::class, 'poll'])->name('poll');
+        Route::post('/connections/{oltConnection}/onu/reboot', [OltSettingsController::class, 'rebootOnu'])->name('onu-reboot');
     });
