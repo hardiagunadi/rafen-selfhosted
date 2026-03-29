@@ -17,5 +17,6 @@ Route::middleware('auth')->group(function (): void {
 require __DIR__.'/self_hosted_license.php';
 require __DIR__.'/freeradius.php';
 require __DIR__.'/genieacs.php';
+require __DIR__.'/olt.php';
 require __DIR__.'/wireguard.php';
 require __DIR__.'/wa_gateway.php';

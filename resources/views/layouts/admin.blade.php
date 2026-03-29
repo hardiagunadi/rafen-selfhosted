@@ -23,6 +23,9 @@
                     @if(($systemFeatureFlags['genieacs'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.genieacs.index') }}" class="nav-link">GenieACS</a>
                     @endif
+                    @if(($systemFeatureFlags['olt'] ?? true) === true)
+                        <a href="{{ route('super-admin.settings.olt.index') }}" class="nav-link">OLT</a>
+                    @endif
                     @if(($systemFeatureFlags['vpn'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.wireguard.index') }}" class="nav-link">WireGuard</a>
                     @endif
