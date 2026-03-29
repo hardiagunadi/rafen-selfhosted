@@ -258,6 +258,7 @@ ensure_runtime_directories() {
         "$APP_DIR/scripts"
         "$APP_DIR/storage/.pm2"
         "$APP_DIR/storage/app/license"
+        "$APP_DIR/storage/app/radius"
         "$APP_DIR/storage/app/wireguard"
         "$APP_DIR/storage/framework/cache/data"
         "$APP_DIR/storage/framework/sessions"
@@ -385,6 +386,8 @@ configure_environment() {
     set_env WA_MULTI_SESSION_PORT "3100"
     set_env WA_MULTI_SESSION_PM2_HOME "$APP_DIR/storage/.pm2"
     set_env WA_MULTI_SESSION_LOG_FILE "$APP_DIR/storage/logs/wa-multi-session-pm2.log"
+    set_env RADIUS_CLIENTS_PATH "$APP_DIR/storage/app/radius/clients-selfhosted.conf"
+    set_env RADIUS_LOG_PATH "$APP_DIR/storage/logs/freeradius.log"
 
     if [ "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP" = "1" ]; then
         if [ "$ALLOW_NON_ROOT" = "1" ]; then

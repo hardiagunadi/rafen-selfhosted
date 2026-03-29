@@ -101,6 +101,7 @@ ENV);
     expect($exitCode)->toBe(0)
         ->and(is_dir($workspace.'/bootstrap/cache'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/app/license'))->toBeTrue()
+        ->and(is_dir($workspace.'/storage/app/radius'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/app/wireguard'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/.pm2'))->toBeTrue()
         ->and(is_dir($workspace.'/wa-multi-session'))->toBeTrue()
@@ -118,6 +119,8 @@ ENV);
         ->and($env)->toContain('WA_MULTI_SESSION_PATH='.$workspace.'/wa-multi-session')
         ->and($env)->toContain('WA_MULTI_SESSION_PM2_HOME='.$workspace.'/storage/.pm2')
         ->and($env)->toContain('WA_MULTI_SESSION_LOG_FILE='.$workspace.'/storage/logs/wa-multi-session-pm2.log')
+        ->and($env)->toContain('RADIUS_CLIENTS_PATH='.$workspace.'/storage/app/radius/clients-selfhosted.conf')
+        ->and($env)->toContain('RADIUS_LOG_PATH='.$workspace.'/storage/logs/freeradius.log')
         ->and($env)->not->toContain('WG_APPLY_COMMAND=');
 });
 
