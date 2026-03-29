@@ -17,6 +17,7 @@
                 </a>
                 <div class="navbar-nav ml-auto align-items-center">
                     <a href="{{ route('super-admin.settings.license') }}" class="nav-link">Lisensi Sistem</a>
+                    <a href="{{ route('super-admin.settings.mikrotik.index') }}" class="nav-link">MikroTik</a>
                     @if(($systemFeatureFlags['radius'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.freeradius.index') }}" class="nav-link">FreeRADIUS</a>
                     @endif
