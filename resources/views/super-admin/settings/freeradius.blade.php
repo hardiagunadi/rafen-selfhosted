@@ -35,12 +35,20 @@
                             <dd class="col-sm-7">{{ $syncStatus['updated_at'] ?? '-' }}</dd>
                             <dt class="col-sm-5">Ukuran File</dt>
                             <dd class="col-sm-7">{{ $syncStatus['size'] !== null ? $syncStatus['size'].' bytes' : '-' }}</dd>
+                            <dt class="col-sm-5">radcheck</dt>
+                            <dd class="col-sm-7">{{ $replyStats['checks'] }} entri</dd>
+                            <dt class="col-sm-5">radreply</dt>
+                            <dd class="col-sm-7">{{ $replyStats['replies'] }} entri</dd>
                         </dl>
 
                         <div class="d-flex flex-wrap gap-2">
                             <form action="{{ route('super-admin.settings.freeradius.sync') }}" method="POST" class="mr-2 mb-2">
                                 @csrf
                                 <button type="submit" class="btn btn-success btn-sm">Sync NAS Clients</button>
+                            </form>
+                            <form action="{{ route('super-admin.settings.freeradius.sync-replies') }}" method="POST" class="mr-2 mb-2">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-success btn-sm">Sync radcheck/radreply</button>
                             </form>
                             <form action="{{ route('super-admin.settings.freeradius.service', 'reload') }}" method="POST" class="mr-2 mb-2">
                                 @csrf

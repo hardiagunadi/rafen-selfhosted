@@ -10,6 +10,7 @@ Route::middleware(['auth', 'system.license', 'system.feature:radius', SuperAdmin
     ->group(function (): void {
         Route::get('/', [FreeRadiusSettingsController::class, 'index'])->name('index');
         Route::post('/sync', [FreeRadiusSettingsController::class, 'sync'])->name('sync');
+        Route::post('/sync-replies', [FreeRadiusSettingsController::class, 'syncReplies'])->name('sync-replies');
         Route::post('/service/{action}', [FreeRadiusSettingsController::class, 'service'])->name('service');
         Route::post('/nas', [FreeRadiusSettingsController::class, 'store'])->name('nas.store');
         Route::put('/nas/{radiusNas}', [FreeRadiusSettingsController::class, 'update'])->name('nas.update');

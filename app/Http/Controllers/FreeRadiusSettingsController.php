@@ -6,6 +6,7 @@ use App\Http\Requests\StoreRadiusNasRequest;
 use App\Http\Requests\UpdateRadiusNasRequest;
 use App\Models\RadiusNas;
 use App\Services\RadiusClientsSynchronizer;
+use App\Services\RadiusReplySynchronizer;
 use App\Services\RadiusServiceManager;
 use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Filesystem\Filesystem;
@@ -25,6 +26,7 @@ class FreeRadiusSettingsController extends Controller
     {
         $clientsPath = (string) config('radius.clients_path');
         $logPath = (string) config('radius.log_path');
+        $replyStats = app(RadiusReplySynchronizer::class)->stats();
 
         return view('super-admin.settings.freeradius', [
             'radiusNasClients' => RadiusNas::query()->orderBy('name')->get(),
@@ -33,6 +35,7 @@ class FreeRadiusSettingsController extends Controller
             'syncStatus' => $this->resolveSyncStatus($clientsPath),
             'logPayload' => $this->readLogTail($logPath, 120),
             'serviceStatus' => $serviceManager->status(),
+            'replyStats' => $replyStats,
         ]);
     }
 
@@ -87,6 +90,21 @@ class FreeRadiusSettingsController extends Controller
             return redirect()
                 ->route('super-admin.settings.freeradius.index')
                 ->with('error', 'Sinkronisasi NAS clients FreeRADIUS gagal: '.$throwable->getMessage());
+        }
+    }
+
+    public function syncReplies(RadiusReplySynchronizer $synchronizer): RedirectResponse
+    {
+        try {
+            $count = $synchronizer->sync();
+
+            return redirect()
+                ->route('super-admin.settings.freeradius.index')
+                ->with('success', "Sinkronisasi radcheck/radreply berhasil untuk {$count} akun aktif.");
+        } catch (Throwable $throwable) {
+            return redirect()
+                ->route('super-admin.settings.freeradius.index')
+                ->with('error', 'Sinkronisasi radcheck/radreply gagal: '.$throwable->getMessage());
         }
     }
 

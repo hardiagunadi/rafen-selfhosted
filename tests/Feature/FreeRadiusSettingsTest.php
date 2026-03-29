@@ -1,6 +1,10 @@
 <?php
 
+use App\Models\MikrotikConnection;
+use App\Models\RadiusAccount;
+use App\Models\RadiusCheck;
 use App\Models\RadiusNas;
+use App\Models\RadiusReply;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
@@ -121,6 +125,54 @@ it('syncs radius nas clients into the clients file', function () {
         ->toContain('require_message_authenticator = yes');
 
     Process::assertRan('radiusctl reload');
+});
+
+it('syncs radius replies from active radius accounts', function () {
+    $user = User::factory()->superAdmin()->create();
+    $connection = MikrotikConnection::factory()->create();
+
+    RadiusAccount::factory()->create([
+        'mikrotik_connection_id' => $connection->id,
+        'username' => 'pppoe-active',
+        'password' => 'secret123',
+        'service' => 'pppoe',
+        'ipv4_address' => '10.10.10.10',
+        'rate_limit' => '10M/10M',
+        'profile' => 'pool-pppoe',
+        'is_active' => true,
+    ]);
+
+    RadiusAccount::factory()->create([
+        'mikrotik_connection_id' => $connection->id,
+        'username' => 'hotspot-active',
+        'password' => 'secret456',
+        'service' => 'hotspot',
+        'ipv4_address' => null,
+        'rate_limit' => '5M/5M',
+        'profile' => 'group-hotspot',
+        'is_active' => true,
+    ]);
+
+    RadiusAccount::factory()->create([
+        'mikrotik_connection_id' => $connection->id,
+        'username' => 'disabled-user',
+        'password' => 'secret789',
+        'service' => 'pppoe',
+        'ipv4_address' => '10.10.10.20',
+        'is_active' => false,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('super-admin.settings.freeradius.sync-replies'))
+        ->assertRedirect(route('super-admin.settings.freeradius.index'))
+        ->assertSessionHas('success');
+
+    expect(RadiusCheck::query()->where('username', 'pppoe-active')->where('attribute', 'Cleartext-Password')->exists())->toBeTrue()
+        ->and(RadiusReply::query()->where('username', 'pppoe-active')->where('attribute', 'Framed-IP-Address')->value('value'))->toBe('10.10.10.10')
+        ->and(RadiusReply::query()->where('username', 'pppoe-active')->where('attribute', 'Mikrotik-Rate-Limit')->value('value'))->toBe('10M/10M')
+        ->and(RadiusReply::query()->where('username', 'pppoe-active')->where('attribute', 'Framed-Pool')->value('value'))->toBe('pool-pppoe')
+        ->and(RadiusReply::query()->where('username', 'hotspot-active')->where('attribute', 'Mikrotik-Group')->value('value'))->toBe('group-hotspot')
+        ->and(RadiusReply::query()->where('username', 'disabled-user')->exists())->toBeFalse();
 });
 
 it('restarts freeradius service from the settings page', function () {
