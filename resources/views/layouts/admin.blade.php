@@ -19,6 +19,9 @@
                     <a href="{{ route('super-admin.settings.license') }}" class="nav-link">Lisensi Sistem</a>
                     <a href="{{ route('super-admin.settings.mikrotik.index') }}" class="nav-link">MikroTik</a>
                     @if(($systemFeatureFlags['radius'] ?? true) === true)
+                        <a href="{{ route('super-admin.settings.radius-accounts.index') }}" class="nav-link">Radius Accounts</a>
+                    @endif
+                    @if(($systemFeatureFlags['radius'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.freeradius.index') }}" class="nav-link">FreeRADIUS</a>
                     @endif
                     @if(($systemFeatureFlags['genieacs'] ?? true) === true)

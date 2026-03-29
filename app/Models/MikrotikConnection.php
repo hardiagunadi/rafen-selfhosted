@@ -5,6 +5,7 @@ namespace App\Models;
 use Database\Factories\MikrotikConnectionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class MikrotikConnection extends Model
 {
@@ -64,5 +65,10 @@ class MikrotikConnection extends Model
             'isolir_setup_done' => 'boolean',
             'isolir_setup_at' => 'datetime',
         ];
+    }
+
+    public function radiusAccounts(): HasMany
+    {
+        return $this->hasMany(RadiusAccount::class);
     }
 }
