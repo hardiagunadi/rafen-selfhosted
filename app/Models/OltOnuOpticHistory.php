@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
-use Database\Factories\OltOnuOpticFactory;
+use Database\Factories\OltOnuOpticHistoryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class OltOnuOptic extends Model
+class OltOnuOpticHistory extends Model
 {
-    /** @use HasFactory<OltOnuOpticFactory> */
+    /** @use HasFactory<OltOnuOpticHistoryFactory> */
     use HasFactory;
 
     protected $fillable = [
         'olt_connection_id',
+        'olt_onu_optic_id',
         'onu_index',
         'pon_interface',
         'onu_number',
@@ -27,7 +27,7 @@ class OltOnuOptic extends Model
         'tx_olt_dbm',
         'status',
         'raw_payload',
-        'last_seen_at',
+        'polled_at',
     ];
 
     protected function casts(): array
@@ -39,7 +39,7 @@ class OltOnuOptic extends Model
             'rx_olt_dbm' => 'decimal:2',
             'tx_olt_dbm' => 'decimal:2',
             'raw_payload' => 'array',
-            'last_seen_at' => 'datetime',
+            'polled_at' => 'datetime',
         ];
     }
 
@@ -48,8 +48,8 @@ class OltOnuOptic extends Model
         return $this->belongsTo(OltConnection::class);
     }
 
-    public function histories(): HasMany
+    public function oltOnuOptic(): BelongsTo
     {
-        return $this->hasMany(OltOnuOpticHistory::class);
+        return $this->belongsTo(OltOnuOptic::class);
     }
 }

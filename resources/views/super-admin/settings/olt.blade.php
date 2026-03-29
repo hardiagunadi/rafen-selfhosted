@@ -223,6 +223,33 @@
         </div>
 
         @if($selectedConnection)
+            <div class="row mt-3">
+                <div class="col-md-4">
+                    <div class="small-box bg-danger">
+                        <div class="inner">
+                            <h3>{{ $alarmCounts['critical'] }}</h3>
+                            <p>Alarm Kritis</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="small-box bg-warning">
+                        <div class="inner">
+                            <h3>{{ $alarmCounts['warning'] }}</h3>
+                            <p>Alarm Warning</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="small-box bg-success">
+                        <div class="inner">
+                            <h3>{{ $alarmCounts['normal'] }}</h3>
+                            <p>ONU Normal</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card mt-3">
                 <div class="card-header">
                     <h3 class="card-title mb-0">Ringkasan Port {{ $selectedConnection->name }}</h3>
@@ -261,10 +288,61 @@
 
             <div class="card mt-3">
                 <div class="card-header">
+                    <h3 class="card-title mb-0">Alarm Sintetis Aktif</h3>
+                </div>
+                <div class="card-body">
+                    @if($activeAlarmRows->isEmpty())
+                        <div class="text-muted">Belum ada alarm aktif dari hasil evaluasi redaman dan status ONU.</div>
+                    @else
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>PON</th>
+                                        <th>ONU</th>
+                                        <th>Nama</th>
+                                        <th>Severity</th>
+                                        <th>Rx Saat Ini</th>
+                                        <th>Rx Sebelumnya</th>
+                                        <th>Delta</th>
+                                        <th>Ringkasan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($activeAlarmRows as $row)
+                                        <tr>
+                                            <td>{{ $row['onu']->pon_interface ?? '-' }}</td>
+                                            <td>{{ $row['onu']->onu_number ?? '-' }}</td>
+                                            <td>{{ $row['onu']->onu_name ?? $row['onu']->serial_number ?? '-' }}</td>
+                                            <td>
+                                                <span class="badge {{ $row['severity'] === 'critical' ? 'badge-danger' : 'badge-warning' }}">
+                                                    {{ $row['label'] }}
+                                                </span>
+                                            </td>
+                                            <td>{{ $row['current_rx_onu_dbm'] !== null ? number_format($row['current_rx_onu_dbm'], 2).' dBm' : '-' }}</td>
+                                            <td>{{ $row['previous_rx_onu_dbm'] !== null ? number_format($row['previous_rx_onu_dbm'], 2).' dBm' : '-' }}</td>
+                                            <td>{{ $row['rx_delta_db'] !== null ? number_format($row['rx_delta_db'], 2).' dB' : '-' }}</td>
+                                            <td>
+                                                <div>{{ $row['summary'] ?? '-' }}</div>
+                                                @if($row['reasons'] !== [])
+                                                    <div class="small text-muted">{{ implode(' | ', $row['reasons']) }}</div>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
                     <h3 class="card-title mb-0">ONU Tersimpan</h3>
                 </div>
                 <div class="card-body">
-                    @if($selectedConnection->onuOptics()->count() === 0)
+                    @if($currentOnus->isEmpty())
                         <div class="text-muted">Belum ada hasil polling ONU.</div>
                     @else
                         <div class="table-responsive">
@@ -278,11 +356,12 @@
                                         <th>Distance</th>
                                         <th>Rx ONU</th>
                                         <th>Status</th>
+                                        <th>History Redaman</th>
                                         <th class="text-right">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach($selectedConnection->onuOptics()->orderBy('pon_interface')->orderBy('onu_number')->get() as $onu)
+                                    @foreach($currentOnus as $onu)
                                         <tr>
                                             <td>{{ $onu->pon_interface ?? '-' }}</td>
                                             <td>{{ $onu->onu_number ?? '-' }}</td>
@@ -295,6 +374,21 @@
                                                     {{ $onu->status ?? '-' }}
                                                 </span>
                                             </td>
+                                            <td>
+                                                @php($historyItems = $historySeriesByOnu->get($onu->onu_index, collect()))
+                                                @if($historyItems->isEmpty())
+                                                    <span class="text-muted">Belum ada history</span>
+                                                @else
+                                                    <div class="d-flex flex-wrap" style="gap: 0.35rem;">
+                                                        @foreach($historyItems as $historyItem)
+                                                            <span class="badge badge-light border">
+                                                                {{ $historyItem->polled_at?->format('H:i') ?? '-' }}:
+                                                                {{ $historyItem->rx_onu_dbm !== null ? number_format((float) $historyItem->rx_onu_dbm, 2).' dBm' : '-' }}
+                                                            </span>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            </td>
                                             <td class="text-right">
                                                 <form action="{{ route('super-admin.settings.olt.onu-reboot', $selectedConnection) }}" method="POST" class="mb-0" onsubmit="return confirm('Kirim reboot ke ONU ini?');">
                                                     @csrf
@@ -302,6 +396,44 @@
                                                     <button type="submit" class="btn btn-outline-danger btn-sm">Reboot ONU</button>
                                                 </form>
                                             </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h3 class="card-title mb-0">History Redaman Terbaru</h3>
+                </div>
+                <div class="card-body">
+                    @if($recentHistoryRows->isEmpty())
+                        <div class="text-muted">Belum ada riwayat polling redaman ONU.</div>
+                    @else
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Waktu</th>
+                                        <th>PON</th>
+                                        <th>ONU</th>
+                                        <th>Nama</th>
+                                        <th>Rx ONU</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($recentHistoryRows as $historyRow)
+                                        <tr>
+                                            <td>{{ $historyRow->polled_at?->format('d/m/Y H:i:s') ?? '-' }}</td>
+                                            <td>{{ $historyRow->pon_interface ?? '-' }}</td>
+                                            <td>{{ $historyRow->onu_number ?? '-' }}</td>
+                                            <td>{{ $historyRow->onu_name ?? $historyRow->serial_number ?? '-' }}</td>
+                                            <td>{{ $historyRow->rx_onu_dbm !== null ? number_format((float) $historyRow->rx_onu_dbm, 2).' dBm' : '-' }}</td>
+                                            <td>{{ $historyRow->status ?? '-' }}</td>
                                         </tr>
                                     @endforeach
                                 </tbody>

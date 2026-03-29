@@ -2,6 +2,7 @@
 
 use App\Models\OltConnection;
 use App\Models\OltOnuOptic;
+use App\Models\OltOnuOpticHistory;
 use App\Models\User;
 use App\Services\HsgqSnmpCollector;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -171,7 +172,88 @@ it('polls olt optics and stores the latest onu data', function () {
 
     expect($connection->fresh()->last_poll_success)->toBeTrue()
         ->and(OltOnuOptic::query()->where('olt_connection_id', $connection->id)->count())->toBe(1)
-        ->and(OltOnuOptic::query()->where('olt_connection_id', $connection->id)->value('pon_interface'))->toBe('PON1');
+        ->and(OltOnuOptic::query()->where('olt_connection_id', $connection->id)->value('pon_interface'))->toBe('PON1')
+        ->and(OltOnuOpticHistory::query()->where('olt_connection_id', $connection->id)->count())->toBe(1)
+        ->and(OltOnuOpticHistory::query()->where('olt_connection_id', $connection->id)->value('pon_interface'))->toBe('PON1');
+});
+
+it('shows synthetic olt alarms and attenuation history from polling snapshots', function () {
+    $user = User::factory()->superAdmin()->create();
+    $connection = OltConnection::factory()->create([
+        'name' => 'OLT Alarm',
+    ]);
+    $onu = OltOnuOptic::factory()->create([
+        'olt_connection_id' => $connection->id,
+        'onu_index' => '16777473',
+        'pon_interface' => 'PON1',
+        'onu_number' => '1',
+        'onu_name' => 'ONU Alarm',
+        'rx_onu_dbm' => -31.50,
+        'status' => 'online',
+        'last_seen_at' => now(),
+    ]);
+
+    OltOnuOpticHistory::factory()->create([
+        'olt_connection_id' => $connection->id,
+        'olt_onu_optic_id' => $onu->id,
+        'onu_index' => $onu->onu_index,
+        'pon_interface' => 'PON1',
+        'onu_number' => '1',
+        'onu_name' => 'ONU Alarm',
+        'rx_onu_dbm' => -31.50,
+        'status' => 'online',
+        'polled_at' => now(),
+    ]);
+
+    OltOnuOpticHistory::factory()->create([
+        'olt_connection_id' => $connection->id,
+        'olt_onu_optic_id' => $onu->id,
+        'onu_index' => $onu->onu_index,
+        'pon_interface' => 'PON1',
+        'onu_number' => '1',
+        'onu_name' => 'ONU Alarm',
+        'rx_onu_dbm' => -24.00,
+        'status' => 'online',
+        'polled_at' => now()->subMinutes(10),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('super-admin.settings.olt.index', ['connection' => $connection->id]))
+        ->assertSuccessful()
+        ->assertSee('Alarm Sintetis Aktif')
+        ->assertSee('History Redaman Terbaru')
+        ->assertSee('ONU Alarm')
+        ->assertSee('Kritis')
+        ->assertSee('31.50 dBm', false)
+        ->assertSee('24.00 dBm', false);
+});
+
+it('marks offline onu as a critical synthetic alarm', function () {
+    $user = User::factory()->superAdmin()->create();
+    $connection = OltConnection::factory()->create();
+    $onu = OltOnuOptic::factory()->create([
+        'olt_connection_id' => $connection->id,
+        'onu_index' => 'offline-1',
+        'onu_name' => 'ONU Offline',
+        'status' => 'offline',
+        'rx_onu_dbm' => null,
+    ]);
+
+    OltOnuOpticHistory::factory()->create([
+        'olt_connection_id' => $connection->id,
+        'olt_onu_optic_id' => $onu->id,
+        'onu_index' => $onu->onu_index,
+        'onu_name' => 'ONU Offline',
+        'status' => 'offline',
+        'rx_onu_dbm' => null,
+        'polled_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('super-admin.settings.olt.index', ['connection' => $connection->id]))
+        ->assertSuccessful()
+        ->assertSee('ONU Offline')
+        ->assertSee('ONU offline.');
 });
 
 it('reboots an onu from the stored olt data', function () {

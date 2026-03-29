@@ -35,6 +35,15 @@ return [
         ],
     ],
 
+    'synthetic_alarm' => [
+        'rx_warning_dbm' => (float) env('OLT_SYNTHETIC_ALARM_RX_WARNING_DBM', -27),
+        'rx_critical_dbm' => (float) env('OLT_SYNTHETIC_ALARM_RX_CRITICAL_DBM', -30),
+        'delta_warning_db' => (float) env('OLT_SYNTHETIC_ALARM_DELTA_WARNING_DB', 2.5),
+        'delta_critical_db' => (float) env('OLT_SYNTHETIC_ALARM_DELTA_CRITICAL_DB', 4.0),
+        'history_limit' => (int) env('OLT_SYNTHETIC_ALARM_HISTORY_LIMIT', 8),
+        'recent_entries_limit' => (int) env('OLT_SYNTHETIC_ALARM_RECENT_ENTRIES_LIMIT', 20),
+    ],
+
     'hsgq_models' => [
         'HSGQ-E04I (EPON)' => [
             'oids' => [

@@ -54,4 +54,9 @@ class OltConnection extends Model
     {
         return $this->hasMany(OltOnuOptic::class);
     }
+
+    public function onuOpticHistories(): HasMany
+    {
+        return $this->hasMany(OltOnuOpticHistory::class);
+    }
 }

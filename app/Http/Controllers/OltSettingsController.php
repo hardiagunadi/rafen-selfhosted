@@ -7,7 +7,9 @@ use App\Http\Requests\StoreOltConnectionRequest;
 use App\Http\Requests\UpdateOltConnectionRequest;
 use App\Models\OltConnection;
 use App\Models\OltOnuOptic;
+use App\Models\OltOnuOpticHistory;
 use App\Services\HsgqSnmpCollector;
+use App\Services\OltOnuAlarmEvaluator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -25,11 +27,22 @@ class OltSettingsController extends Controller
 
         $selectedConnection = $connections->firstWhere('id', request()->integer('connection'))
             ?? $connections->first();
+        $currentOnus = $selectedConnection
+            ? $selectedConnection->onuOptics()->orderBy('pon_interface')->orderBy('onu_number')->get()
+            : collect();
+        $alarmPayload = $selectedConnection
+            ? $this->buildAlarmPayload($selectedConnection, $currentOnus)
+            : $this->emptyAlarmPayload();
 
         return view('super-admin.settings.olt', [
             'connections' => $connections,
             'selectedConnection' => $selectedConnection,
             'summaryRows' => $selectedConnection ? $this->buildSummaryRows($selectedConnection) : collect(),
+            'currentOnus' => $currentOnus,
+            'activeAlarmRows' => $alarmPayload['active_rows'],
+            'historySeriesByOnu' => $alarmPayload['history_series_by_onu'],
+            'recentHistoryRows' => $alarmPayload['recent_history_rows'],
+            'alarmCounts' => $alarmPayload['alarm_counts'],
             'availableModels' => HsgqSnmpCollector::availableModels(),
         ]);
     }
@@ -112,17 +125,19 @@ class OltSettingsController extends Controller
         try {
             $records = $collector->collectEssential($oltConnection);
             $now = now();
-
-            OltOnuOptic::query()
-                ->where('olt_connection_id', $oltConnection->id)
-                ->delete();
+            $seenOnuIndexes = [];
 
             if ($records !== []) {
-                OltOnuOptic::query()->insert(array_map(
-                    function (array $record) use ($oltConnection, $now): array {
-                        return [
+                foreach ($records as $record) {
+                    $onuIndex = (string) $record['onu_index'];
+                    $seenOnuIndexes[] = $onuIndex;
+
+                    $onuOptic = OltOnuOptic::query()->updateOrCreate(
+                        [
                             'olt_connection_id' => $oltConnection->id,
-                            'onu_index' => (string) $record['onu_index'],
+                            'onu_index' => $onuIndex,
+                        ],
+                        [
                             'pon_interface' => $record['pon_interface'] ?? null,
                             'onu_number' => $record['onu_number'] ?? null,
                             'serial_number' => $record['serial_number'] ?? null,
@@ -133,15 +148,38 @@ class OltSettingsController extends Controller
                             'rx_olt_dbm' => $record['rx_olt_dbm'] ?? null,
                             'tx_olt_dbm' => $record['tx_olt_dbm'] ?? null,
                             'status' => $record['status'] ?? null,
-                            'raw_payload' => json_encode($record['raw_payload'] ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                            'raw_payload' => $record['raw_payload'] ?? [],
                             'last_seen_at' => $now,
-                            'created_at' => $now,
-                            'updated_at' => $now,
-                        ];
-                    },
-                    $records,
-                ));
+                        ],
+                    );
+
+                    OltOnuOpticHistory::query()->create([
+                        'olt_connection_id' => $oltConnection->id,
+                        'olt_onu_optic_id' => $onuOptic->id,
+                        'onu_index' => $onuIndex,
+                        'pon_interface' => $record['pon_interface'] ?? null,
+                        'onu_number' => $record['onu_number'] ?? null,
+                        'serial_number' => $record['serial_number'] ?? null,
+                        'onu_name' => $record['onu_name'] ?? null,
+                        'distance_m' => $record['distance_m'] ?? null,
+                        'rx_onu_dbm' => $record['rx_onu_dbm'] ?? null,
+                        'tx_onu_dbm' => $record['tx_onu_dbm'] ?? null,
+                        'rx_olt_dbm' => $record['rx_olt_dbm'] ?? null,
+                        'tx_olt_dbm' => $record['tx_olt_dbm'] ?? null,
+                        'status' => $record['status'] ?? null,
+                        'raw_payload' => $record['raw_payload'] ?? [],
+                        'polled_at' => $now,
+                    ]);
+                }
             }
+
+            OltOnuOptic::query()
+                ->where('olt_connection_id', $oltConnection->id)
+                ->when(
+                    $seenOnuIndexes !== [],
+                    fn ($query) => $query->whereNotIn('onu_index', $seenOnuIndexes),
+                )
+                ->delete();
 
             $oltConnection->update([
                 'last_polled_at' => $now,
@@ -163,6 +201,93 @@ class OltSettingsController extends Controller
                 ->route('super-admin.settings.olt.index', ['connection' => $oltConnection->id])
                 ->with('error', 'Polling OLT gagal: '.$throwable->getMessage());
         }
+    }
+
+    /**
+     * @param  Collection<int, OltOnuOptic>  $currentOnus
+     * @return array{
+     *     active_rows: Collection<int, array<string, mixed>>,
+     *     history_series_by_onu: Collection<string, Collection<int, OltOnuOpticHistory>>,
+     *     recent_history_rows: Collection<int, OltOnuOpticHistory>,
+     *     alarm_counts: array{critical: int, warning: int, normal: int}
+     * }
+     */
+    private function buildAlarmPayload(OltConnection $oltConnection, Collection $currentOnus): array
+    {
+        if ($currentOnus->isEmpty()) {
+            return $this->emptyAlarmPayload();
+        }
+
+        $historyLimit = (int) config('olt.synthetic_alarm.history_limit', 8);
+        $recentEntriesLimit = (int) config('olt.synthetic_alarm.recent_entries_limit', 20);
+        $historiesByOnu = $oltConnection->onuOpticHistories()
+            ->whereIn('onu_index', $currentOnus->pluck('onu_index')->all())
+            ->latest('polled_at')
+            ->get()
+            ->groupBy('onu_index')
+            ->map(fn (Collection $items): Collection => $items->take($historyLimit));
+        $alarmEvaluator = app(OltOnuAlarmEvaluator::class);
+        $activeRows = $currentOnus
+            ->map(function (OltOnuOptic $onu) use ($alarmEvaluator, $historiesByOnu): ?array {
+                /** @var Collection<int, OltOnuOpticHistory> $onuHistories */
+                $onuHistories = $historiesByOnu->get($onu->onu_index, collect());
+                $evaluation = $alarmEvaluator->evaluate($onu, $onuHistories->skip(1)->first());
+
+                if ($evaluation['severity'] === 'none') {
+                    return null;
+                }
+
+                return [
+                    'onu' => $onu,
+                    'severity' => $evaluation['severity'],
+                    'label' => $evaluation['label'],
+                    'summary' => $evaluation['summary'],
+                    'reasons' => $evaluation['reasons'],
+                    'current_rx_onu_dbm' => $evaluation['current_rx_onu_dbm'],
+                    'previous_rx_onu_dbm' => $evaluation['previous_rx_onu_dbm'],
+                    'rx_delta_db' => $evaluation['rx_delta_db'],
+                ];
+            })
+            ->filter()
+            ->values()
+            ->sortByDesc(fn (array $row): int => $row['severity'] === 'critical' ? 2 : 1)
+            ->values();
+
+        return [
+            'active_rows' => $activeRows,
+            'history_series_by_onu' => $historiesByOnu,
+            'recent_history_rows' => $oltConnection->onuOpticHistories()
+                ->latest('polled_at')
+                ->limit($recentEntriesLimit)
+                ->get(),
+            'alarm_counts' => [
+                'critical' => $activeRows->where('severity', 'critical')->count(),
+                'warning' => $activeRows->where('severity', 'warning')->count(),
+                'normal' => max(0, $currentOnus->count() - $activeRows->count()),
+            ],
+        ];
+    }
+
+    /**
+     * @return array{
+     *     active_rows: Collection<int, array<string, mixed>>,
+     *     history_series_by_onu: Collection<string, Collection<int, OltOnuOpticHistory>>,
+     *     recent_history_rows: Collection<int, OltOnuOpticHistory>,
+     *     alarm_counts: array{critical: int, warning: int, normal: int}
+     * }
+     */
+    private function emptyAlarmPayload(): array
+    {
+        return [
+            'active_rows' => collect(),
+            'history_series_by_onu' => collect(),
+            'recent_history_rows' => collect(),
+            'alarm_counts' => [
+                'critical' => 0,
+                'warning' => 0,
+                'normal' => 0,
+            ],
+        ];
     }
 
     public function rebootOnu(

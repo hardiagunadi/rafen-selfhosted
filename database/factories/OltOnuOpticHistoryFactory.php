@@ -1,0 +1,48 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Models\OltConnection;
+use App\Models\OltOnuOptic;
+use App\Models\OltOnuOpticHistory;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<OltOnuOpticHistory>
+ */
+class OltOnuOpticHistoryFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            'olt_onu_optic_id' => OltOnuOptic::factory(),
+            'olt_connection_id' => function (array $attributes): int {
+                $onuOptic = OltOnuOptic::query()->find($attributes['olt_onu_optic_id']);
+
+                return $onuOptic?->olt_connection_id ?? OltConnection::factory()->create()->id;
+            },
+            'onu_index' => (string) $this->faker->unique()->numberBetween(10001, 99999),
+            'pon_interface' => 'PON'.$this->faker->numberBetween(1, 8),
+            'onu_number' => (string) $this->faker->numberBetween(1, 128),
+            'serial_number' => strtoupper($this->faker->bothify('HSGQ########')),
+            'onu_name' => 'ONU '.$this->faker->word(),
+            'distance_m' => $this->faker->numberBetween(50, 8000),
+            'rx_onu_dbm' => $this->faker->randomFloat(2, -35, -12),
+            'tx_onu_dbm' => $this->faker->randomFloat(2, 1, 6),
+            'rx_olt_dbm' => $this->faker->randomFloat(2, -35, -12),
+            'tx_olt_dbm' => $this->faker->randomFloat(2, 1, 6),
+            'status' => $this->faker->randomElement(['online', 'offline']),
+            'raw_payload' => [
+                'distance' => '3850',
+                'rx_onu' => '-24.6',
+                'status' => 'online',
+            ],
+            'polled_at' => now(),
+        ];
+    }
+}
