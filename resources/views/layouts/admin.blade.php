@@ -26,6 +26,7 @@
                     @endif
                     @if(($systemFeatureFlags['genieacs'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.genieacs.index') }}" class="nav-link">GenieACS</a>
+                        <a href="{{ route('super-admin.settings.cpe.index') }}" class="nav-link">CPE</a>
                     @endif
                     @if(($systemFeatureFlags['olt'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.olt.index') }}" class="nav-link">OLT</a>

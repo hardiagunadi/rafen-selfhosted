@@ -19,6 +19,7 @@ require __DIR__.'/mikrotik.php';
 require __DIR__.'/radius_accounts.php';
 require __DIR__.'/freeradius.php';
 require __DIR__.'/genieacs.php';
+require __DIR__.'/cpe.php';
 require __DIR__.'/olt.php';
 require __DIR__.'/wireguard.php';
 require __DIR__.'/wa_gateway.php';
