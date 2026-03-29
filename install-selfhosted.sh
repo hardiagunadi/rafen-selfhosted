@@ -256,6 +256,7 @@ ensure_runtime_directories() {
         "$APP_DIR/bootstrap/cache"
         "$APP_DIR/database"
         "$APP_DIR/scripts"
+        "$APP_DIR/storage/.pm2"
         "$APP_DIR/storage/app/license"
         "$APP_DIR/storage/app/wireguard"
         "$APP_DIR/storage/framework/cache/data"
@@ -263,6 +264,7 @@ ensure_runtime_directories() {
         "$APP_DIR/storage/framework/views"
         "$APP_DIR/storage/logs"
         "$APP_DIR/tests/Unit"
+        "$APP_DIR/wa-multi-session"
     )
 
     for directory in "${directories[@]}"; do
@@ -378,6 +380,11 @@ configure_environment() {
     set_env WG_SERVER_PUBLIC_KEY_PATH "$APP_DIR/storage/app/wireguard/server_public.key"
     set_env WG_POOL_START "10.0.0.2"
     set_env WG_POOL_END "10.0.0.254"
+    set_env WA_MULTI_SESSION_PATH "$APP_DIR/wa-multi-session"
+    set_env WA_MULTI_SESSION_HOST "127.0.0.1"
+    set_env WA_MULTI_SESSION_PORT "3100"
+    set_env WA_MULTI_SESSION_PM2_HOME "$APP_DIR/storage/.pm2"
+    set_env WA_MULTI_SESSION_LOG_FILE "$APP_DIR/storage/logs/wa-multi-session-pm2.log"
 
     if [ "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP" = "1" ]; then
         if [ "$ALLOW_NON_ROOT" = "1" ]; then

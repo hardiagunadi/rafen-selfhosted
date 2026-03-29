@@ -20,6 +20,9 @@
                     @if(($systemFeatureFlags['vpn'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.wireguard.index') }}" class="nav-link">WireGuard</a>
                     @endif
+                    @if(($systemFeatureFlags['wa'] ?? true) === true)
+                        <a href="{{ route('super-admin.settings.wa-gateway.index') }}" class="nav-link">WhatsApp</a>
+                    @endif
                     @auth
                         <form action="{{ route('logout') }}" method="POST" class="mb-0 ml-2">
                             @csrf

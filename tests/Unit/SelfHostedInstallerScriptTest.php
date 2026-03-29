@@ -102,6 +102,8 @@ ENV);
         ->and(is_dir($workspace.'/bootstrap/cache'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/app/license'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/app/wireguard'))->toBeTrue()
+        ->and(is_dir($workspace.'/storage/.pm2'))->toBeTrue()
+        ->and(is_dir($workspace.'/wa-multi-session'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/framework/cache/data'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/framework/sessions'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/framework/views'))->toBeTrue()
@@ -113,6 +115,9 @@ ENV);
         ->and($env)->toContain('WG_CONFIG_PATH='.$workspace.'/storage/app/wireguard/wg0.conf')
         ->and($env)->toContain('WG_SERVER_PRIVATE_KEY_PATH='.$workspace.'/storage/app/wireguard/server_private.key')
         ->and($env)->toContain('WG_SERVER_PUBLIC_KEY_PATH='.$workspace.'/storage/app/wireguard/server_public.key')
+        ->and($env)->toContain('WA_MULTI_SESSION_PATH='.$workspace.'/wa-multi-session')
+        ->and($env)->toContain('WA_MULTI_SESSION_PM2_HOME='.$workspace.'/storage/.pm2')
+        ->and($env)->toContain('WA_MULTI_SESSION_LOG_FILE='.$workspace.'/storage/logs/wa-multi-session-pm2.log')
         ->and($env)->not->toContain('WG_APPLY_COMMAND=');
 });
 
