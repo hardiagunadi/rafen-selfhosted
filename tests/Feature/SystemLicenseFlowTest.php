@@ -8,6 +8,7 @@ use App\Services\LicenseSignatureService;
 use App\Services\SystemLicenseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 
@@ -15,6 +16,7 @@ uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     $this->licensePath = storage_path('framework/testing/license/rafen.lic');
+    $this->activationRequestPath = storage_path('framework/testing/license/activation-request.json');
     $this->machineIdPath = storage_path('framework/testing/license/machine-id');
     $this->keyPair = sodium_crypto_sign_keypair();
     $this->publicKey = base64_encode(sodium_crypto_sign_publickey($this->keyPair));
@@ -36,6 +38,7 @@ beforeEach(function (): void {
 
 afterEach(function (): void {
     File::delete($this->licensePath);
+    File::delete($this->activationRequestPath);
     File::delete($this->machineIdPath);
 });
 
@@ -59,6 +62,28 @@ it('uploads and validates a signed system license', function () {
         ->and($license->status)->toBe('active')
         ->and($license->license_id)->toBe('RAFEN-SH-TEST-0001')
         ->and($license->modules)->toBe(['vpn', 'wa']);
+});
+
+it('rejects an uploaded license when the signature is invalid', function () {
+    $user = User::factory()->superAdmin()->create();
+    $payload = makeSignedLicensePayload($this->secretKey, expiresAt: now()->addMonth()->toDateString());
+    $payload['customer_name'] = 'Tampered Customer';
+
+    $this->actingAs($user)
+        ->post(route('super-admin.settings.license.update'), [
+            'license_file' => UploadedFile::fake()->createWithContent(
+                'rafen-invalid.lic',
+                json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            ),
+        ])
+        ->assertRedirect(route('super-admin.settings.license'))
+        ->assertSessionHas('error');
+
+    $license = SystemLicense::query()->first();
+
+    expect($license)->not->toBeNull()
+        ->and($license->status)->toBe('invalid')
+        ->and($license->validation_error)->toBe('Signature lisensi tidak valid.');
 });
 
 it('keeps an expired license valid during grace period', function () {
@@ -104,6 +129,54 @@ it('blocks features that are not included in the active license modules', functi
     expect($featureGateService->isEnabled('vpn'))->toBeTrue()
         ->and($featureGateService->isEnabled('wa'))->toBeFalse()
         ->and($featureGateService->message('wa'))->toContain('WhatsApp Gateway');
+});
+
+it('downloads an activation request from the super admin page', function () {
+    $user = User::factory()->superAdmin()->create();
+
+    $response = $this->actingAs($user)
+        ->get(route('super-admin.settings.license.activation-request'));
+
+    $response->assertSuccessful();
+    expect($response->headers->get('content-type'))->toContain('application/json');
+
+    $payload = json_decode($response->streamedContent(), true);
+
+    expect($payload)->toBeArray()
+        ->and($payload['app_name'])->toBe(config('app.name'))
+        ->and($payload['current_license_status'])->toBe('missing')
+        ->and($payload['fingerprint'])->toBe(app(LicenseFingerprintService::class)->generate());
+});
+
+it('writes an activation request file from the cli command', function () {
+    $this->artisan("license:activation-request --path={$this->activationRequestPath}")
+        ->expectsOutputToContain('Activation request disimpan ke:')
+        ->assertExitCode(0);
+
+    expect(File::exists($this->activationRequestPath))->toBeTrue();
+
+    $payload = json_decode((string) File::get($this->activationRequestPath), true);
+
+    expect($payload)->toBeArray()
+        ->and($payload['current_license_status'])->toBe('missing')
+        ->and($payload['fingerprint'])->toBe(app(LicenseFingerprintService::class)->generate());
+});
+
+it('reports active status from the cli after syncing a valid license', function () {
+    $payload = makeSignedLicensePayload($this->secretKey, expiresAt: now()->addMonth()->toDateString(), modules: ['vpn', 'wa']);
+
+    File::put($this->licensePath, json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    app(SystemLicenseService::class)->syncFromDisk();
+
+    Artisan::call('license:status', ['--json' => true]);
+    $output = Artisan::output();
+    $decoded = json_decode($output, true);
+
+    expect($decoded)->toBeArray()
+        ->and($decoded['status'])->toBe('active')
+        ->and($decoded['is_valid'])->toBeTrue()
+        ->and($decoded['license_id'])->toBe('RAFEN-SH-TEST-0001')
+        ->and($decoded['modules'])->toBe(['vpn', 'wa']);
 });
 
 /**
