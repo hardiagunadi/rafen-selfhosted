@@ -20,6 +20,9 @@
                     @if(($systemFeatureFlags['radius'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.freeradius.index') }}" class="nav-link">FreeRADIUS</a>
                     @endif
+                    @if(($systemFeatureFlags['genieacs'] ?? true) === true)
+                        <a href="{{ route('super-admin.settings.genieacs.index') }}" class="nav-link">GenieACS</a>
+                    @endif
                     @if(($systemFeatureFlags['vpn'] ?? true) === true)
                         <a href="{{ route('super-admin.settings.wireguard.index') }}" class="nav-link">WireGuard</a>
                     @endif
