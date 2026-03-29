@@ -17,6 +17,9 @@
                 </a>
                 <div class="navbar-nav ml-auto align-items-center">
                     <a href="{{ route('super-admin.settings.license') }}" class="nav-link">Lisensi Sistem</a>
+                    @if(($systemFeatureFlags['vpn'] ?? true) === true)
+                        <a href="{{ route('super-admin.settings.wireguard.index') }}" class="nav-link">WireGuard</a>
+                    @endif
                     @auth
                         <form action="{{ route('logout') }}" method="POST" class="mb-0 ml-2">
                             @csrf

@@ -5,6 +5,8 @@
 /bootstrap/cache/*
 !/bootstrap/cache/.gitignore
 /database/*.sqlite
+/storage/app/wireguard/*
+!/storage/app/wireguard/.gitignore
 /storage/app/license/*
 !/storage/app/license/.gitignore
 /storage/*.key

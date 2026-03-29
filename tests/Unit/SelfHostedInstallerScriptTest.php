@@ -98,6 +98,7 @@ ENV);
     expect($exitCode)->toBe(0)
         ->and(is_dir($workspace.'/bootstrap/cache'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/app/license'))->toBeTrue()
+        ->and(is_dir($workspace.'/storage/app/wireguard'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/framework/cache/data'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/framework/sessions'))->toBeTrue()
         ->and(is_dir($workspace.'/storage/framework/views'))->toBeTrue()
@@ -105,7 +106,10 @@ ENV);
         ->and(file_exists($databasePath))->toBeTrue()
         ->and($databasePath)->toEndWith('/database/database.sqlite')
         ->and($env)->toContain('APP_URL=https://billing.example.test')
-        ->and($licensePath)->toBe($workspace.'/storage/app/license/rafen.lic');
+        ->and($licensePath)->toBe($workspace.'/storage/app/license/rafen.lic')
+        ->and($env)->toContain('WG_CONFIG_PATH='.$workspace.'/storage/app/wireguard/wg0.conf')
+        ->and($env)->toContain('WG_SERVER_PRIVATE_KEY_PATH='.$workspace.'/storage/app/wireguard/server_private.key')
+        ->and($env)->toContain('WG_SERVER_PUBLIC_KEY_PATH='.$workspace.'/storage/app/wireguard/server_public.key');
 });
 
 it('runs deploy commands against the configured toolchain', function () {
