@@ -34,6 +34,9 @@ it('ships a self-hosted installer with install deploy and status workflows', fun
         ->toContain('run_artisan_runtime_setup()')
         ->toContain('user:create-super-admin')
         ->toContain('LICENSE_SELF_HOSTED_ENABLED')
+        ->toContain('RUN_WIREGUARD_SYSTEM_BOOTSTRAP')
+        ->toContain('bootstrap_wireguard_system_service()')
+        ->toContain('wireguard:sync')
         ->toContain('show_status()')
         ->not->toContain('install-server-all-in-one.sh');
 });
@@ -109,7 +112,8 @@ ENV);
         ->and($licensePath)->toBe($workspace.'/storage/app/license/rafen.lic')
         ->and($env)->toContain('WG_CONFIG_PATH='.$workspace.'/storage/app/wireguard/wg0.conf')
         ->and($env)->toContain('WG_SERVER_PRIVATE_KEY_PATH='.$workspace.'/storage/app/wireguard/server_private.key')
-        ->and($env)->toContain('WG_SERVER_PUBLIC_KEY_PATH='.$workspace.'/storage/app/wireguard/server_public.key');
+        ->and($env)->toContain('WG_SERVER_PUBLIC_KEY_PATH='.$workspace.'/storage/app/wireguard/server_public.key')
+        ->and($env)->not->toContain('WG_APPLY_COMMAND=');
 });
 
 it('runs deploy commands against the configured toolchain', function () {
@@ -188,5 +192,95 @@ BASH);
         ->and($log)->toContain('php:artisan config:clear --ansi')
         ->and($log)->toContain('php:artisan key:generate --force')
         ->and($log)->toContain('php:artisan migrate --force --ansi')
+        ->and($log)->toContain('php:artisan wireguard:sync --ansi')
         ->and($log)->toContain('php:artisan user:create-super-admin Rafen Admin admin@example.com --password=secret-123 --ansi');
+});
+
+it('can bootstrap optional wireguard system integration with local stubs', function () {
+    $workspace = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/wireguard-system-workspace');
+    $binDirectory = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/wireguard-system-bin');
+    $logPath = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/wireguard-system.log');
+    $wireguardSystemDirectory = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/wireguard-system');
+    $sudoersPath = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/rafen-wireguard.sudoers');
+
+    mkdir($workspace, 0777, true);
+    mkdir($binDirectory, 0777, true);
+    file_put_contents($workspace.'/artisan', "#!/usr/bin/env bash\nexit 0\n");
+    file_put_contents($workspace.'/composer.json', json_encode(['name' => 'rafen/self-hosted-test'], JSON_PRETTY_PRINT));
+    file_put_contents($workspace.'/.env.example', <<<'ENV'
+APP_NAME="Rafen Self-Hosted"
+APP_ENV=production
+APP_KEY=
+APP_DEBUG=false
+APP_URL=http://localhost
+DB_CONNECTION=sqlite
+DB_DATABASE=database/database.sqlite
+SESSION_DRIVER=file
+QUEUE_CONNECTION=sync
+CACHE_STORE=file
+LICENSE_SELF_HOSTED_ENABLED=true
+LICENSE_ENFORCE=true
+ENV);
+    chmod($workspace.'/artisan', 0755);
+
+    file_put_contents($binDirectory.'/php', <<<BASH
+#!/usr/bin/env bash
+printf 'php:%s\n' "\$*" >> {$logPath}
+exit 0
+BASH);
+    file_put_contents($binDirectory.'/apt-get', <<<BASH
+#!/usr/bin/env bash
+printf 'apt-get:%s\n' "\$*" >> {$logPath}
+exit 0
+BASH);
+    file_put_contents($binDirectory.'/systemctl', <<<BASH
+#!/usr/bin/env bash
+printf 'systemctl:%s\n' "\$*" >> {$logPath}
+exit 0
+BASH);
+    file_put_contents($binDirectory.'/visudo', <<<BASH
+#!/usr/bin/env bash
+printf 'visudo:%s\n' "\$*" >> {$logPath}
+exit 0
+BASH);
+    chmod($binDirectory.'/php', 0755);
+    chmod($binDirectory.'/apt-get', 0755);
+    chmod($binDirectory.'/systemctl', 0755);
+    chmod($binDirectory.'/visudo', 0755);
+
+    $scriptPath = selfHostedRepoPath('install-selfhosted.sh');
+    $command = sprintf(
+        'ALLOW_NON_ROOT=1 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s PHP_BIN=%s APT_GET_BIN=%s SYSTEMCTL_BIN=%s VISUDO_BIN=%s RUN_COMPOSER_INSTALL=0 RUN_NPM_BUILD=0 RUN_SUPER_ADMIN_SETUP=0 RUN_WIREGUARD_SYSTEM_BOOTSTRAP=1 WG_SYSTEM_DIR=%s WG_SUDOERS_PATH=%s WG_SYNC_HELPER_PATH=%s bash %s install',
+        escapeshellarg($workspace),
+        escapeshellarg($workspace),
+        escapeshellarg($workspace.'/database/database.sqlite'),
+        escapeshellarg($binDirectory.'/php'),
+        escapeshellarg($binDirectory.'/apt-get'),
+        escapeshellarg($binDirectory.'/systemctl'),
+        escapeshellarg($binDirectory.'/visudo'),
+        escapeshellarg($wireguardSystemDirectory),
+        escapeshellarg($sudoersPath),
+        escapeshellarg($workspace.'/scripts/wireguard-apply.sh'),
+        escapeshellarg($scriptPath),
+    );
+
+    exec($command.' 2>&1', $output, $exitCode);
+
+    if ($exitCode !== 0) {
+        test()->fail(implode(PHP_EOL, $output));
+    }
+
+    $env = file_get_contents($workspace.'/.env');
+    $helperScript = file_get_contents($workspace.'/scripts/wireguard-apply.sh');
+    $log = file_get_contents($logPath);
+
+    expect($exitCode)->toBe(0)
+        ->and($env)->toContain('WG_APPLY_COMMAND='.$workspace.'/scripts/wireguard-apply.sh')
+        ->and($helperScript)->toContain('install -m 600')
+        ->and($helperScript)->toContain($wireguardSystemDirectory.'/wg0.conf')
+        ->and($helperScript)->toContain($binDirectory.'/systemctl')
+        ->and($log)->toContain('apt-get:update')
+        ->and($log)->toContain('apt-get:install -y wireguard-tools')
+        ->and($log)->toContain('php:artisan wireguard:sync --ansi')
+        ->and(file_exists($sudoersPath))->toBeFalse();
 });

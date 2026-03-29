@@ -15,12 +15,17 @@ SYSTEM_TIMEZONE="${SYSTEM_TIMEZONE:-Asia/Jakarta}"
 PHP_BIN="${PHP_BIN:-php}"
 COMPOSER_BIN="${COMPOSER_BIN:-composer}"
 NPM_BIN="${NPM_BIN:-npm}"
+APT_GET_BIN="${APT_GET_BIN:-apt-get}"
+SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
+VISUDO_BIN="${VISUDO_BIN:-visudo}"
 ALLOW_NON_ROOT="${ALLOW_NON_ROOT:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 RUN_COMPOSER_INSTALL="${RUN_COMPOSER_INSTALL:-1}"
 RUN_NPM_BUILD="${RUN_NPM_BUILD:-1}"
 RUN_MIGRATE="${RUN_MIGRATE:-1}"
 RUN_SUPER_ADMIN_SETUP="${RUN_SUPER_ADMIN_SETUP:-1}"
+RUN_WIREGUARD_SYSTEM_BOOTSTRAP="${RUN_WIREGUARD_SYSTEM_BOOTSTRAP:-0}"
+RUN_WIREGUARD_PACKAGE_INSTALL="${RUN_WIREGUARD_PACKAGE_INSTALL:-1}"
 APP_URL_OVERRIDE="${APP_URL_OVERRIDE:-}"
 ADMIN_NAME="${ADMIN_NAME:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
@@ -31,6 +36,11 @@ DB_PORT="${DB_PORT:-3306}"
 DB_DATABASE="${DB_DATABASE:-$APP_DIR/database/database.sqlite}"
 DB_USERNAME="${DB_USERNAME:-root}"
 DB_PASSWORD="${DB_PASSWORD:-}"
+WG_SYSTEM_DIR="${WG_SYSTEM_DIR:-/etc/wireguard}"
+WG_SYSTEM_INTERFACE="${WG_SYSTEM_INTERFACE:-wg0}"
+WG_SYSTEM_SERVICE="${WG_SYSTEM_SERVICE:-wg-quick@${WG_SYSTEM_INTERFACE}}"
+WG_SUDOERS_PATH="${WG_SUDOERS_PATH:-/etc/sudoers.d/rafen-wireguard}"
+WG_SYNC_HELPER_PATH="${WG_SYNC_HELPER_PATH:-$APP_DIR/scripts/wireguard-apply.sh}"
 
 info() {
     printf '[INFO] %s\n' "$1"
@@ -70,14 +80,20 @@ Options:
   --skip-npm-build          Skip npm install/build
   --skip-migrate            Skip php artisan migrate --force
   --skip-super-admin        Skip php artisan user:create-super-admin
+  --wireguard-system        Prepare OS-level WireGuard helper and service bootstrap
+  --skip-wireguard-package-install
+                            Skip apt-get install for WireGuard packages during bootstrap
   --dry-run                 Print actions without executing commands
   --help                    Show this help
 
 Env overrides:
   APP_DIR, EXPECTED_APP_DIR, ENV_FILE, APP_USER, APP_GROUP, SYSTEM_TIMEZONE,
-  PHP_BIN, COMPOSER_BIN, NPM_BIN, ALLOW_NON_ROOT, RUN_COMPOSER_INSTALL,
-  RUN_NPM_BUILD, RUN_MIGRATE, RUN_SUPER_ADMIN_SETUP, DB_CONNECTION,
-  DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD.
+  PHP_BIN, COMPOSER_BIN, NPM_BIN, APT_GET_BIN, SYSTEMCTL_BIN, VISUDO_BIN,
+  ALLOW_NON_ROOT, RUN_COMPOSER_INSTALL, RUN_NPM_BUILD, RUN_MIGRATE,
+  RUN_SUPER_ADMIN_SETUP, RUN_WIREGUARD_SYSTEM_BOOTSTRAP,
+  RUN_WIREGUARD_PACKAGE_INSTALL, DB_CONNECTION, DB_HOST, DB_PORT,
+  DB_DATABASE, DB_USERNAME, DB_PASSWORD, WG_SYSTEM_DIR, WG_SYSTEM_INTERFACE,
+  WG_SYSTEM_SERVICE, WG_SUDOERS_PATH, WG_SYNC_HELPER_PATH.
 EOF
 }
 
@@ -151,6 +167,14 @@ parse_args() {
                 ;;
             --skip-super-admin)
                 RUN_SUPER_ADMIN_SETUP=0
+                shift
+                ;;
+            --wireguard-system)
+                RUN_WIREGUARD_SYSTEM_BOOTSTRAP=1
+                shift
+                ;;
+            --skip-wireguard-package-install)
+                RUN_WIREGUARD_PACKAGE_INSTALL=0
                 shift
                 ;;
             --dry-run)
@@ -231,6 +255,7 @@ ensure_runtime_directories() {
     local directories=(
         "$APP_DIR/bootstrap/cache"
         "$APP_DIR/database"
+        "$APP_DIR/scripts"
         "$APP_DIR/storage/app/license"
         "$APP_DIR/storage/app/wireguard"
         "$APP_DIR/storage/framework/cache/data"
@@ -354,6 +379,14 @@ configure_environment() {
     set_env WG_POOL_START "10.0.0.2"
     set_env WG_POOL_END "10.0.0.254"
 
+    if [ "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP" = "1" ]; then
+        if [ "$ALLOW_NON_ROOT" = "1" ]; then
+            set_env WG_APPLY_COMMAND "$WG_SYNC_HELPER_PATH"
+        else
+            set_env WG_APPLY_COMMAND "sudo $WG_SYNC_HELPER_PATH"
+        fi
+    fi
+
     if [ "$DB_CONNECTION" = "sqlite" ]; then
         set_env DB_DATABASE "$DB_DATABASE"
     else
@@ -402,6 +435,81 @@ configure_timezone() {
     fi
 }
 
+install_wireguard_packages() {
+    if [ "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP" != "1" ] || [ "$RUN_WIREGUARD_PACKAGE_INSTALL" != "1" ]; then
+        return
+    fi
+
+    command_exists "$APT_GET_BIN" || fail "apt-get tidak ditemukan: $APT_GET_BIN"
+    run_command "$APT_GET_BIN" update
+    run_command "$APT_GET_BIN" install -y wireguard-tools
+}
+
+write_wireguard_sync_helper() {
+    if [ "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP" != "1" ]; then
+        return
+    fi
+
+    local helper_dir
+    helper_dir="$(dirname "$WG_SYNC_HELPER_PATH")"
+
+    install_dir "$helper_dir"
+
+    if [ "$DRY_RUN" = "1" ]; then
+        printf '[DRY-RUN] write helper %s\n' "$WG_SYNC_HELPER_PATH"
+        return 0
+    fi
+
+    cat >"$WG_SYNC_HELPER_PATH" <<EOF
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+APP_CONFIG_PATH="${APP_DIR}/storage/app/wireguard/${WG_SYSTEM_INTERFACE}.conf"
+SYSTEM_CONFIG_PATH="${WG_SYSTEM_DIR}/${WG_SYSTEM_INTERFACE}.conf"
+SYSTEM_SERVICE="${WG_SYSTEM_SERVICE}"
+
+mkdir -p "${WG_SYSTEM_DIR}"
+install -m 600 "\$APP_CONFIG_PATH" "\$SYSTEM_CONFIG_PATH"
+"${SYSTEMCTL_BIN}" daemon-reload
+"${SYSTEMCTL_BIN}" enable --now "\$SYSTEM_SERVICE"
+"${SYSTEMCTL_BIN}" restart "\$SYSTEM_SERVICE"
+EOF
+
+    chmod 0755 "$WG_SYNC_HELPER_PATH"
+}
+
+write_wireguard_sudoers() {
+    if [ "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP" != "1" ] || [ "$ALLOW_NON_ROOT" = "1" ]; then
+        return
+    fi
+
+    local sudoers_content
+    sudoers_content="$APP_USER ALL=(root) NOPASSWD: $WG_SYNC_HELPER_PATH"
+
+    if [ "$DRY_RUN" = "1" ]; then
+        printf '[DRY-RUN] write sudoers %s => %s\n' "$WG_SUDOERS_PATH" "$sudoers_content"
+        return 0
+    fi
+
+    printf '%s\n' "$sudoers_content" >"$WG_SUDOERS_PATH"
+    chmod 0440 "$WG_SUDOERS_PATH"
+
+    if command_exists "$VISUDO_BIN"; then
+        run_command "$VISUDO_BIN" -cf "$WG_SUDOERS_PATH"
+    fi
+}
+
+bootstrap_wireguard_system_service() {
+    if [ "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP" != "1" ]; then
+        return
+    fi
+
+    install_dir "$WG_SYSTEM_DIR"
+    install_wireguard_packages
+    write_wireguard_sync_helper
+    write_wireguard_sudoers
+}
+
 composer_install() {
     if [ "$RUN_COMPOSER_INSTALL" != "1" ]; then
         return
@@ -445,6 +553,8 @@ run_artisan_runtime_setup() {
         run_in_app "$PHP_BIN" artisan migrate --force --ansi
     fi
 
+    run_in_app "$PHP_BIN" artisan wireguard:sync --ansi
+
     if [ "$RUN_SUPER_ADMIN_SETUP" != "1" ]; then
         return
     fi
@@ -467,6 +577,7 @@ show_status() {
     printf 'Vendor Directory     : %s\n' "$([ -d "$APP_DIR/vendor" ] && printf yes || printf no)"
     printf 'Bootstrap Cache Dir  : %s\n' "$([ -d "$APP_DIR/bootstrap/cache" ] && printf yes || printf no)"
     printf 'License Directory    : %s\n' "$([ -d "$APP_DIR/storage/app/license" ] && printf yes || printf no)"
+    printf 'WireGuard Directory  : %s\n' "$([ -d "$APP_DIR/storage/app/wireguard" ] && printf yes || printf no)"
     printf 'DB Connection        : %s\n' "$DB_CONNECTION"
 
     if [ "$DB_CONNECTION" = "sqlite" ]; then
@@ -481,7 +592,12 @@ show_status() {
         printf 'App URL              : %s\n' "$(read_env APP_URL)"
         printf 'License Enabled      : %s\n' "$(read_env LICENSE_SELF_HOSTED_ENABLED)"
         printf 'License Enforced     : %s\n' "$(read_env LICENSE_ENFORCE)"
+        printf 'WG Apply Command     : %s\n' "$(read_env WG_APPLY_COMMAND)"
     fi
+
+    printf 'WG System Bootstrap  : %s\n' "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP"
+    printf 'WG Helper Path       : %s\n' "$WG_SYNC_HELPER_PATH"
+    printf 'WG System Service    : %s\n' "$WG_SYSTEM_SERVICE"
 }
 
 run_install_or_deploy() {
@@ -495,6 +611,7 @@ run_install_or_deploy() {
     configure_timezone
     composer_install
     npm_build
+    bootstrap_wireguard_system_service
     run_artisan_runtime_setup
     apply_basic_permissions
 
