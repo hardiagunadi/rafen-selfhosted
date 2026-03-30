@@ -9,6 +9,9 @@ APP_DIR="${APP_DIR:-$SCRIPT_DIR}"
 EXPECTED_APP_DIR="${EXPECTED_APP_DIR:-/var/www/rafen-selfhosted}"
 ENV_FILE="${ENV_FILE:-$APP_DIR/.env}"
 ENV_EXAMPLE_FILE="${ENV_EXAMPLE_FILE:-$APP_DIR/.env.example}"
+DEPLOY_USER="${DEPLOY_USER:-deploy}"
+DEPLOY_GROUP="${DEPLOY_GROUP:-$DEPLOY_USER}"
+DEPLOY_PASSWORD="${DEPLOY_PASSWORD:-}"
 APP_USER="${APP_USER:-www-data}"
 APP_GROUP="${APP_GROUP:-www-data}"
 SYSTEM_TIMEZONE="${SYSTEM_TIMEZONE:-Asia/Jakarta}"
@@ -102,7 +105,8 @@ Options:
   --help                    Show this help
 
 Env overrides:
-  APP_DIR, EXPECTED_APP_DIR, ENV_FILE, APP_USER, APP_GROUP, SYSTEM_TIMEZONE,
+  APP_DIR, EXPECTED_APP_DIR, ENV_FILE, DEPLOY_USER, DEPLOY_GROUP, DEPLOY_PASSWORD,
+  APP_USER, APP_GROUP, SYSTEM_TIMEZONE,
   PHP_BIN, COMPOSER_BIN, NPM_BIN, APT_GET_BIN, SYSTEMCTL_BIN, VISUDO_BIN,
   NGINX_BIN, NGINX_SERVICE, ALLOW_NON_ROOT, RUN_COMPOSER_INSTALL, RUN_NPM_BUILD, RUN_MIGRATE,
   RUN_SUPER_ADMIN_SETUP, RUN_SYSTEM_BOOTSTRAP, RUN_WIREGUARD_SYSTEM_BOOTSTRAP, LICENSE_PUBLIC_KEY_VALUE,
@@ -125,7 +129,7 @@ elevate_with_sudo() {
 
     sudo -v || fail "Autentikasi sudo gagal."
 
-    exec sudo --preserve-env=APP_DIR,EXPECTED_APP_DIR,ENV_FILE,ENV_EXAMPLE_FILE,APP_USER,APP_GROUP,SYSTEM_TIMEZONE,PHP_BIN,COMPOSER_BIN,NPM_BIN,APT_GET_BIN,SYSTEMCTL_BIN,VISUDO_BIN,ALLOW_NON_ROOT,DRY_RUN,RUN_COMPOSER_INSTALL,RUN_NPM_BUILD,RUN_MIGRATE,RUN_SUPER_ADMIN_SETUP,RUN_SYSTEM_BOOTSTRAP,RUN_WIREGUARD_SYSTEM_BOOTSTRAP,RUN_WIREGUARD_PACKAGE_INSTALL,APP_URL_OVERRIDE,APP_DOMAIN,LICENSE_PUBLIC_KEY_VALUE,ADMIN_NAME,ADMIN_EMAIL,ADMIN_PASSWORD,DB_CONNECTION,DB_HOST,DB_PORT,DB_DATABASE,DB_USERNAME,DB_PASSWORD,WG_SYSTEM_DIR,WG_SYSTEM_INTERFACE,WG_SYSTEM_SERVICE,WG_SUDOERS_PATH,WG_SYNC_HELPER_PATH,SYSTEM_PRIMARY_IP,NGINX_BIN,NGINX_SERVICE,NGINX_SITE_AVAILABLE_PATH,NGINX_SITE_ENABLED_PATH,NGINX_DEFAULT_SITE_PATH,PHP_FPM_SERVICE,PHP_FPM_SOCK bash "$0" "$@"
+    exec sudo --preserve-env=APP_DIR,EXPECTED_APP_DIR,ENV_FILE,ENV_EXAMPLE_FILE,DEPLOY_USER,DEPLOY_GROUP,DEPLOY_PASSWORD,APP_USER,APP_GROUP,SYSTEM_TIMEZONE,PHP_BIN,COMPOSER_BIN,NPM_BIN,APT_GET_BIN,SYSTEMCTL_BIN,VISUDO_BIN,ALLOW_NON_ROOT,DRY_RUN,RUN_COMPOSER_INSTALL,RUN_NPM_BUILD,RUN_MIGRATE,RUN_SUPER_ADMIN_SETUP,RUN_SYSTEM_BOOTSTRAP,RUN_WIREGUARD_SYSTEM_BOOTSTRAP,RUN_WIREGUARD_PACKAGE_INSTALL,APP_URL_OVERRIDE,APP_DOMAIN,LICENSE_PUBLIC_KEY_VALUE,ADMIN_NAME,ADMIN_EMAIL,ADMIN_PASSWORD,DB_CONNECTION,DB_HOST,DB_PORT,DB_DATABASE,DB_USERNAME,DB_PASSWORD,WG_SYSTEM_DIR,WG_SYSTEM_INTERFACE,WG_SYSTEM_SERVICE,WG_SUDOERS_PATH,WG_SYNC_HELPER_PATH,SYSTEM_PRIMARY_IP,NGINX_BIN,NGINX_SERVICE,NGINX_SITE_AVAILABLE_PATH,NGINX_SITE_ENABLED_PATH,NGINX_DEFAULT_SITE_PATH,PHP_FPM_SERVICE,PHP_FPM_SOCK bash "$0" "$@"
 }
 
 parse_args() {
@@ -270,6 +274,45 @@ run_in_app() {
     )
 }
 
+shell_quote() {
+    printf '%q' "$1"
+}
+
+installer_exec_user() {
+    if [ "$(id -u)" -eq 0 ] && [ "$ALLOW_NON_ROOT" != "1" ]; then
+        printf '%s' "$DEPLOY_USER"
+        return
+    fi
+
+    id -un
+}
+
+run_in_app_as_installer_user() {
+    local install_user
+    local install_group
+    local quoted_command=()
+    local arg
+
+    install_user="$(installer_exec_user)"
+    install_group="$DEPLOY_GROUP"
+
+    if [ "$DRY_RUN" = "1" ]; then
+        printf '[DRY-RUN] (cd %s && as %s:%s => %s)\n' "$APP_DIR" "$install_user" "$install_group" "$*"
+        return 0
+    fi
+
+    if [ "$install_user" = "$(id -un)" ]; then
+        run_in_app "$@"
+        return
+    fi
+
+    for arg in "$@"; do
+        quoted_command+=("$(shell_quote "$arg")")
+    done
+
+    run_command runuser -u "$install_user" -g "$install_group" -- /bin/bash -lc "cd $(shell_quote "$APP_DIR") && ${quoted_command[*]}"
+}
+
 ensure_expected_app_dir() {
     if [ "$APP_DIR" != "$EXPECTED_APP_DIR" ]; then
         warn "APP_DIR saat ini adalah $APP_DIR, bukan $EXPECTED_APP_DIR."
@@ -292,6 +335,96 @@ install_dir() {
     fi
 
     mkdir -p "$path"
+}
+
+group_exists() {
+    getent group "$1" >/dev/null 2>&1
+}
+
+user_exists() {
+    id "$1" >/dev/null 2>&1
+}
+
+prompt_deploy_password() {
+    local password
+    local password_confirm
+
+    if [ -n "$DEPLOY_PASSWORD" ]; then
+        return
+    fi
+
+    [ -t 0 ] || fail "DEPLOY_PASSWORD belum diisi dan installer tidak berjalan interaktif. Set env DEPLOY_PASSWORD untuk membuat user $DEPLOY_USER."
+
+    while true; do
+        printf 'Masukkan password untuk user %s: ' "$DEPLOY_USER" >&2
+        read -r -s password
+        printf '\n' >&2
+        printf 'Konfirmasi password user %s: ' "$DEPLOY_USER" >&2
+        read -r -s password_confirm
+        printf '\n' >&2
+
+        [ -n "$password" ] || {
+            warn "Password tidak boleh kosong."
+            continue
+        }
+
+        if [ "$password" != "$password_confirm" ]; then
+            warn "Konfirmasi password tidak cocok. Coba lagi."
+            continue
+        fi
+
+        DEPLOY_PASSWORD="$password"
+        return
+    done
+}
+
+ensure_deploy_user() {
+    if [ "$ALLOW_NON_ROOT" = "1" ] || [ "$(id -u)" -ne 0 ]; then
+        return
+    fi
+
+    if ! group_exists "$DEPLOY_GROUP"; then
+        info "Membuat group deploy: $DEPLOY_GROUP"
+        run_command groupadd "$DEPLOY_GROUP"
+    fi
+
+    if user_exists "$DEPLOY_USER"; then
+        return
+    fi
+
+    prompt_deploy_password
+    info "Membuat user deploy: $DEPLOY_USER"
+    run_command useradd -m -s /bin/bash -g "$DEPLOY_GROUP" "$DEPLOY_USER"
+    printf '%s:%s\n' "$DEPLOY_USER" "$DEPLOY_PASSWORD" | run_command chpasswd
+}
+
+ensure_deploy_group_membership() {
+    if [ "$ALLOW_NON_ROOT" = "1" ] || [ "$(id -u)" -ne 0 ]; then
+        return
+    fi
+
+    group_exists "$APP_GROUP" || return
+
+    if id -nG "$DEPLOY_USER" | tr ' ' '\n' | grep -Fx "$APP_GROUP" >/dev/null 2>&1; then
+        return
+    fi
+
+    info "Menambahkan $DEPLOY_USER ke group $APP_GROUP agar proses deploy dan service web bisa berbagi akses."
+    run_command usermod -a -G "$APP_GROUP" "$DEPLOY_USER"
+}
+
+prepare_app_for_deploy_user() {
+    if [ "$ALLOW_NON_ROOT" = "1" ] || [ "$(id -u)" -ne 0 ]; then
+        return
+    fi
+
+    if command_exists chown; then
+        run_command chown -R "$DEPLOY_USER:$DEPLOY_GROUP" "$APP_DIR"
+    fi
+
+    if command_exists chmod; then
+        run_command chmod -R u+rwX,g+rX "$APP_DIR"
+    fi
 }
 
 ensure_runtime_directories() {
@@ -842,7 +975,7 @@ composer_install() {
     fi
 
     command_exists "$COMPOSER_BIN" || fail "Composer tidak ditemukan: $COMPOSER_BIN"
-    run_in_app "$COMPOSER_BIN" install --no-interaction --prefer-dist --optimize-autoloader
+    run_in_app_as_installer_user "$COMPOSER_BIN" install --no-interaction --prefer-dist --optimize-autoloader
 }
 
 npm_build() {
@@ -853,8 +986,8 @@ npm_build() {
     [ -f "$APP_DIR/package.json" ] || return
 
     command_exists "$NPM_BIN" || fail "npm tidak ditemukan: $NPM_BIN"
-    run_in_app "$NPM_BIN" install
-    run_in_app "$NPM_BIN" run build
+    run_in_app_as_installer_user "$NPM_BIN" install
+    run_in_app_as_installer_user "$NPM_BIN" run build
 }
 
 ensure_app_key() {
@@ -866,23 +999,23 @@ ensure_app_key() {
         return
     fi
 
-    run_in_app "$PHP_BIN" artisan key:generate --force
+    run_in_app_as_installer_user "$PHP_BIN" artisan key:generate --force
 }
 
 run_artisan_runtime_setup() {
     command_exists "$PHP_BIN" || fail "PHP binary tidak ditemukan: $PHP_BIN"
 
-    run_in_app "$PHP_BIN" artisan config:clear --ansi
+    run_in_app_as_installer_user "$PHP_BIN" artisan config:clear --ansi
     ensure_app_key
     require_license_public_key
 
     if [ "$RUN_MIGRATE" = "1" ]; then
-        run_in_app "$PHP_BIN" artisan migrate --force --ansi
+        run_in_app_as_installer_user "$PHP_BIN" artisan migrate --force --ansi
     fi
 
-    run_in_app "$PHP_BIN" artisan storage:link --force --ansi
+    run_in_app_as_installer_user "$PHP_BIN" artisan storage:link --force --ansi
 
-    run_in_app "$PHP_BIN" artisan wireguard:sync --ansi
+    run_in_app_as_installer_user "$PHP_BIN" artisan wireguard:sync --ansi
 
     if [ "$RUN_SUPER_ADMIN_SETUP" != "1" ]; then
         return
@@ -893,7 +1026,7 @@ run_artisan_runtime_setup() {
         return
     fi
 
-    run_in_app "$PHP_BIN" artisan user:create-super-admin "$ADMIN_NAME" "$ADMIN_EMAIL" --password="$ADMIN_PASSWORD" --ansi
+    run_in_app_as_installer_user "$PHP_BIN" artisan user:create-super-admin "$ADMIN_NAME" "$ADMIN_EMAIL" --password="$ADMIN_PASSWORD" --ansi
 }
 
 show_status() {
@@ -937,12 +1070,15 @@ show_status() {
 
 run_install_or_deploy() {
     require_root
+    ensure_deploy_user
+    ensure_deploy_group_membership
     ensure_expected_app_dir
     ensure_app_layout
     ensure_runtime_directories
     copy_env_file_if_missing
     configure_environment
     prepare_sqlite_database
+    prepare_app_for_deploy_user
     configure_timezone
     install_system_packages
     composer_install
