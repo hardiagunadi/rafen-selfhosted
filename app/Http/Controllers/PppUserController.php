@@ -55,6 +55,12 @@ class PppUserController extends Controller
 
     public function edit(PppUser $pppUser): View
     {
+        $pppUser->load([
+            'profile',
+            'odp',
+            'invoices' => fn ($query) => $query->latest('due_date')->latest('id')->limit(1),
+        ]);
+
         return view('ppp_users.edit', $this->formData([
             'pppUser' => $pppUser,
         ]));

@@ -53,6 +53,8 @@ class HotspotUserController extends Controller
 
     public function edit(HotspotUser $hotspotUser): View
     {
+        $hotspotUser->load('hotspotProfile');
+
         return view('hotspot_users.edit', $this->formData([
             'hotspotUser' => $hotspotUser,
         ]));
