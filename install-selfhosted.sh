@@ -277,6 +277,86 @@ apt_package_exists() {
     apt-cache show "$1" >/dev/null 2>&1
 }
 
+read_os_release_value() {
+    local key="$1"
+
+    [ -f /etc/os-release ] || return 1
+
+    awk -F= -v target="$key" '
+        $1 == target {
+            gsub(/^"/, "", $2)
+            gsub(/"$/, "", $2)
+            print $2
+            exit
+        }
+    ' /etc/os-release
+}
+
+write_file_with_content() {
+    local target_path="$1"
+    local content="$2"
+
+    if [ "$DRY_RUN" = "1" ]; then
+        printf '[DRY-RUN] write file %s\n' "$target_path"
+        return 0
+    fi
+
+    printf '%s\n' "$content" >"$target_path"
+}
+
+ensure_php_apt_repository() {
+    local os_id
+    local version_codename
+    local ubuntu_codename
+    local sury_list_path="/etc/apt/sources.list.d/sury-php.list"
+    local sury_keyring_path="/etc/apt/keyrings/sury-php.gpg"
+    local sury_repo_line
+
+    apt_package_exists "php${PHP_PREFERRED_VERSION}" && return
+
+    os_id="$(read_os_release_value ID || true)"
+    version_codename="$(read_os_release_value VERSION_CODENAME || true)"
+    ubuntu_codename="$(read_os_release_value UBUNTU_CODENAME || true)"
+
+    case "$os_id" in
+        ubuntu)
+            info "Repository default belum menyediakan php${PHP_PREFERRED_VERSION}, menambahkan ppa:ondrej/php."
+            run_command "$APT_GET_BIN" install -y software-properties-common ca-certificates
+            run_command add-apt-repository -y ppa:ondrej/php
+            ;;
+        debian)
+            [ -n "$version_codename" ] || fail "VERSION_CODENAME tidak ditemukan di /etc/os-release, tidak bisa menambahkan repository PHP Debian."
+
+            info "Repository default belum menyediakan php${PHP_PREFERRED_VERSION}, menambahkan packages.sury.org/php."
+            run_command "$APT_GET_BIN" install -y ca-certificates curl gnupg2 lsb-release apt-transport-https
+            install_dir /etc/apt/keyrings
+
+            if [ "$DRY_RUN" = "1" ]; then
+                printf '[DRY-RUN] download sury key to %s\n' "$sury_keyring_path"
+            else
+                curl -fsSL https://packages.sury.org/php/apt.gpg | gpg --dearmor -o "$sury_keyring_path"
+            fi
+
+            sury_repo_line="deb [signed-by=${sury_keyring_path}] https://packages.sury.org/php/ ${version_codename} main"
+            write_file_with_content "$sury_list_path" "$sury_repo_line"
+            ;;
+        *)
+            if [ -n "$ubuntu_codename" ]; then
+                info "OS terdeteksi mirip Ubuntu (${os_id}), mencoba menambahkan ppa:ondrej/php."
+                run_command "$APT_GET_BIN" install -y software-properties-common ca-certificates
+                run_command add-apt-repository -y ppa:ondrej/php
+            else
+                fail "Paket php${PHP_PREFERRED_VERSION} tidak tersedia dan distro ${os_id:-unknown} belum didukung untuk bootstrap repository otomatis."
+            fi
+            ;;
+    esac
+
+    run_command "$APT_GET_BIN" update
+
+    apt_package_exists "php${PHP_PREFERRED_VERSION}" || fail "Repository PHP tambahan sudah dicoba, tetapi paket php${PHP_PREFERRED_VERSION} masih belum tersedia."
+    apt_package_exists "php${PHP_PREFERRED_VERSION}-fpm" || fail "Repository PHP tambahan sudah dicoba, tetapi paket php${PHP_PREFERRED_VERSION}-fpm masih belum tersedia."
+}
+
 run_command() {
     if [ "$DRY_RUN" = "1" ]; then
         printf '[DRY-RUN] %s\n' "$*"
@@ -713,11 +793,11 @@ install_system_packages() {
 
     command_exists "$APT_GET_BIN" || fail "apt-get tidak ditemukan: $APT_GET_BIN"
     command_exists apt-cache || fail "apt-cache tidak ditemukan."
+    command_exists add-apt-repository || true
 
     run_command "$APT_GET_BIN" update
 
-    apt_package_exists "php${PHP_PREFERRED_VERSION}" || fail "Paket php${PHP_PREFERRED_VERSION} tidak tersedia di apt repository server ini. Tambahkan repository PHP 8.4 terlebih dahulu, lalu jalankan installer lagi."
-    apt_package_exists "php${PHP_PREFERRED_VERSION}-fpm" || fail "Paket php${PHP_PREFERRED_VERSION}-fpm tidak tersedia di apt repository server ini. Tambahkan repository PHP 8.4 terlebih dahulu, lalu jalankan installer lagi."
+    ensure_php_apt_repository
 
     run_command "$APT_GET_BIN" install -y \
         nginx \
