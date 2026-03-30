@@ -31,13 +31,18 @@ it('ships a self-hosted installer with install deploy and status workflows', fun
         ->toContain('prepare_sqlite_database()')
         ->toContain('composer_install()')
         ->toContain('npm_build()')
+        ->toContain('sudo -v')
         ->toContain('run_artisan_runtime_setup()')
         ->toContain('user:create-super-admin')
         ->toContain('LICENSE_SELF_HOSTED_ENABLED')
+        ->toContain('require_license_public_key()')
+        ->toContain('LICENSE_PUBLIC_KEY')
         ->toContain('GENIEACS_NBI_URL')
         ->toContain('GENIEACS_CWMP_STATUS_COMMAND')
         ->toContain('RUN_WIREGUARD_SYSTEM_BOOTSTRAP')
         ->toContain('bootstrap_wireguard_system_service()')
+        ->toContain('storage:link --force --ansi')
+        ->toContain('public/storage')
         ->toContain('wireguard:sync')
         ->toContain('show_status()')
         ->not->toContain('install-server-all-in-one.sh');
@@ -72,17 +77,19 @@ QUEUE_CONNECTION=sync
 CACHE_STORE=file
 LICENSE_SELF_HOSTED_ENABLED=true
 LICENSE_ENFORCE=true
+LICENSE_PUBLIC_KEY=test-public-key
 ENV);
     chmod($workspace.'/artisan', 0755);
 
     $scriptPath = selfHostedRepoPath('install-selfhosted.sh');
     $command = sprintf(
-        'ALLOW_NON_ROOT=1 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s RUN_COMPOSER_INSTALL=0 RUN_NPM_BUILD=0 RUN_MIGRATE=0 RUN_SUPER_ADMIN_SETUP=0 bash %s install --app-url %s',
+        'ALLOW_NON_ROOT=1 RUN_SYSTEM_BOOTSTRAP=0 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s RUN_COMPOSER_INSTALL=0 RUN_NPM_BUILD=0 RUN_MIGRATE=0 RUN_SUPER_ADMIN_SETUP=0 bash %s install --app-url %s --license-public-key %s',
         escapeshellarg($workspace),
         escapeshellarg($workspace),
         escapeshellarg($workspace.'/database/database.sqlite'),
         escapeshellarg($scriptPath),
         escapeshellarg('https://billing.example.test'),
+        escapeshellarg('test-public-key'),
     );
 
     exec($command.' 2>&1', $output, $exitCode);
@@ -114,6 +121,7 @@ ENV);
         ->and(file_exists($databasePath))->toBeTrue()
         ->and($databasePath)->toEndWith('/database/database.sqlite')
         ->and($env)->toContain('APP_URL=https://billing.example.test')
+        ->and($env)->toContain('LICENSE_PUBLIC_KEY=test-public-key')
         ->and($licensePath)->toBe($workspace.'/storage/app/license/rafen.lic')
         ->and($env)->toContain('GENIEACS_NBI_URL=http://127.0.0.1:7557')
         ->and($env)->toContain('GENIEACS_UI_URL=http://127.0.0.1:3000')
@@ -152,6 +160,7 @@ QUEUE_CONNECTION=sync
 CACHE_STORE=file
 LICENSE_SELF_HOSTED_ENABLED=true
 LICENSE_ENFORCE=true
+LICENSE_PUBLIC_KEY=test-public-key
 ENV);
     chmod($workspace.'/artisan', 0755);
 
@@ -176,7 +185,7 @@ BASH);
 
     $scriptPath = selfHostedRepoPath('install-selfhosted.sh');
     $command = sprintf(
-        'ALLOW_NON_ROOT=1 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s PHP_BIN=%s COMPOSER_BIN=%s NPM_BIN=%s ADMIN_NAME=%s ADMIN_EMAIL=%s ADMIN_PASSWORD=%s bash %s deploy',
+        'ALLOW_NON_ROOT=1 RUN_SYSTEM_BOOTSTRAP=0 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s PHP_BIN=%s COMPOSER_BIN=%s NPM_BIN=%s ADMIN_NAME=%s ADMIN_EMAIL=%s ADMIN_PASSWORD=%s bash %s deploy --license-public-key %s',
         escapeshellarg($workspace),
         escapeshellarg($workspace),
         escapeshellarg($workspace.'/database/database.sqlite'),
@@ -187,6 +196,7 @@ BASH);
         escapeshellarg('admin@example.com'),
         escapeshellarg('secret-123'),
         escapeshellarg($scriptPath),
+        escapeshellarg('test-public-key'),
     );
 
     exec($command.' 2>&1', $output, $exitCode);
@@ -205,8 +215,150 @@ BASH);
         ->and($log)->toContain('php:artisan config:clear --ansi')
         ->and($log)->toContain('php:artisan key:generate --force')
         ->and($log)->toContain('php:artisan migrate --force --ansi')
+        ->and($log)->toContain('php:artisan storage:link --force --ansi')
         ->and($log)->toContain('php:artisan wireguard:sync --ansi')
         ->and($log)->toContain('php:artisan user:create-super-admin Rafen Admin admin@example.com --password=secret-123 --ansi');
+});
+
+it('fails fast when license public key is missing', function () {
+    $workspace = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/missing-license-key-workspace');
+    mkdir($workspace, 0777, true);
+    file_put_contents($workspace.'/artisan', "#!/usr/bin/env bash\nexit 0\n");
+    file_put_contents($workspace.'/composer.json', json_encode(['name' => 'rafen/self-hosted-test'], JSON_PRETTY_PRINT));
+    file_put_contents($workspace.'/.env.example', <<<'ENV'
+APP_NAME="Rafen Self-Hosted"
+APP_ENV=production
+APP_KEY=
+APP_DEBUG=false
+APP_URL=http://localhost
+DB_CONNECTION=sqlite
+DB_DATABASE=database/database.sqlite
+SESSION_DRIVER=file
+QUEUE_CONNECTION=sync
+CACHE_STORE=file
+LICENSE_SELF_HOSTED_ENABLED=true
+LICENSE_ENFORCE=true
+ENV);
+    chmod($workspace.'/artisan', 0755);
+
+    $scriptPath = selfHostedRepoPath('install-selfhosted.sh');
+    $command = sprintf(
+        'ALLOW_NON_ROOT=1 RUN_SYSTEM_BOOTSTRAP=0 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s RUN_COMPOSER_INSTALL=0 RUN_NPM_BUILD=0 RUN_MIGRATE=0 RUN_SUPER_ADMIN_SETUP=0 bash %s install',
+        escapeshellarg($workspace),
+        escapeshellarg($workspace),
+        escapeshellarg($workspace.'/database/database.sqlite'),
+        escapeshellarg($scriptPath),
+    );
+
+    exec($command.' 2>&1', $output, $exitCode);
+
+    expect($exitCode)->not->toBe(0)
+        ->and(implode(PHP_EOL, $output))->toContain('LICENSE_PUBLIC_KEY belum diisi');
+});
+
+it('bootstraps nginx and falls back to primary ip when domain is missing', function () {
+    $workspace = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/system-bootstrap-workspace');
+    $binDirectory = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/system-bootstrap-bin');
+    $nginxDirectory = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/nginx');
+    $logPath = selfHostedRepoPath('storage/framework/testing/self-hosted-installer-test/system-bootstrap.log');
+    $siteAvailablePath = $nginxDirectory.'/sites-available/rafen-selfhosted.conf';
+    $siteEnabledPath = $nginxDirectory.'/sites-enabled/rafen-selfhosted.conf';
+    $defaultSitePath = $nginxDirectory.'/sites-enabled/default';
+
+    mkdir($workspace, 0777, true);
+    mkdir($binDirectory, 0777, true);
+    mkdir(dirname($siteAvailablePath), 0777, true);
+    mkdir(dirname($siteEnabledPath), 0777, true);
+    file_put_contents($defaultSitePath, 'default');
+    file_put_contents($workspace.'/artisan', "#!/usr/bin/env bash\nexit 0\n");
+    file_put_contents($workspace.'/composer.json', json_encode(['name' => 'rafen/self-hosted-test'], JSON_PRETTY_PRINT));
+    file_put_contents($workspace.'/.env.example', <<<'ENV'
+APP_NAME="Rafen Self-Hosted"
+APP_ENV=production
+APP_KEY=
+APP_DEBUG=false
+APP_URL=http://localhost
+DB_CONNECTION=sqlite
+DB_DATABASE=database/database.sqlite
+SESSION_DRIVER=file
+QUEUE_CONNECTION=sync
+CACHE_STORE=file
+LICENSE_SELF_HOSTED_ENABLED=true
+LICENSE_ENFORCE=true
+LICENSE_PUBLIC_KEY=test-public-key
+ENV);
+    chmod($workspace.'/artisan', 0755);
+
+    file_put_contents($binDirectory.'/php', <<<BASH
+#!/usr/bin/env bash
+printf 'php:%s\n' "\$*" >> {$logPath}
+exit 0
+BASH);
+    file_put_contents($binDirectory.'/apt-get', <<<BASH
+#!/usr/bin/env bash
+printf 'apt-get:%s\n' "\$*" >> {$logPath}
+exit 0
+BASH);
+    file_put_contents($binDirectory.'/systemctl', <<<BASH
+#!/usr/bin/env bash
+printf 'systemctl:%s\n' "\$*" >> {$logPath}
+exit 0
+BASH);
+    file_put_contents($binDirectory.'/nginx', <<<BASH
+#!/usr/bin/env bash
+printf 'nginx:%s\n' "\$*" >> {$logPath}
+exit 0
+BASH);
+    chmod($binDirectory.'/php', 0755);
+    chmod($binDirectory.'/apt-get', 0755);
+    chmod($binDirectory.'/systemctl', 0755);
+    chmod($binDirectory.'/nginx', 0755);
+
+    $scriptPath = selfHostedRepoPath('install-selfhosted.sh');
+    $command = sprintf(
+        'ALLOW_NON_ROOT=1 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s PHP_BIN=%s APT_GET_BIN=%s SYSTEMCTL_BIN=%s NGINX_BIN=%s RUN_COMPOSER_INSTALL=0 RUN_NPM_BUILD=0 RUN_MIGRATE=0 RUN_SUPER_ADMIN_SETUP=0 RUN_SYSTEM_BOOTSTRAP=1 SYSTEM_PRIMARY_IP=%s NGINX_SITE_AVAILABLE_PATH=%s NGINX_SITE_ENABLED_PATH=%s NGINX_DEFAULT_SITE_PATH=%s PHP_FPM_SERVICE=%s PHP_FPM_SOCK=%s bash %s install --license-public-key %s',
+        escapeshellarg($workspace),
+        escapeshellarg($workspace),
+        escapeshellarg($workspace.'/database/database.sqlite'),
+        escapeshellarg($binDirectory.'/php'),
+        escapeshellarg($binDirectory.'/apt-get'),
+        escapeshellarg($binDirectory.'/systemctl'),
+        escapeshellarg($binDirectory.'/nginx'),
+        escapeshellarg('203.0.113.10'),
+        escapeshellarg($siteAvailablePath),
+        escapeshellarg($siteEnabledPath),
+        escapeshellarg($defaultSitePath),
+        escapeshellarg('php8.4-fpm'),
+        escapeshellarg('/run/php/php8.4-fpm.sock'),
+        escapeshellarg($scriptPath),
+        escapeshellarg('test-public-key'),
+    );
+
+    exec($command.' 2>&1', $output, $exitCode);
+
+    if ($exitCode !== 0) {
+        test()->fail(implode(PHP_EOL, $output));
+    }
+
+    clearstatcache();
+    $env = file_get_contents($workspace.'/.env');
+    $nginxSite = file_get_contents($siteAvailablePath);
+    $log = file_get_contents($logPath);
+
+    expect($exitCode)->toBe(0)
+        ->and($env)->toContain('APP_URL=http://203.0.113.10')
+        ->and($env)->toContain('WG_HOST=203.0.113.10')
+        ->and($nginxSite)->toContain('server_name 203.0.113.10 _;')
+        ->and($nginxSite)->toContain('root '.$workspace.'/public;')
+        ->and($nginxSite)->toContain('fastcgi_pass unix:/run/php/php8.4-fpm.sock;')
+        ->and(is_link($siteEnabledPath))->toBeTrue()
+        ->and(readlink($siteEnabledPath))->toBe($siteAvailablePath)
+        ->and(file_exists($defaultSitePath))->toBeFalse()
+        ->and($log)->toContain('apt-get:update')
+        ->and($log)->toContain('apt-get:install -y nginx git unzip curl composer nodejs npm php php-cli php-fpm php-sqlite3 php-mysql php-curl php-mbstring php-xml php-zip php-bcmath php-intl php-gd')
+        ->and($log)->toContain('nginx:-t')
+        ->and($log)->toContain('systemctl:enable --now php8.4-fpm')
+        ->and($log)->toContain('systemctl:restart nginx');
 });
 
 it('can bootstrap optional wireguard system integration with local stubs', function () {
@@ -233,6 +385,7 @@ QUEUE_CONNECTION=sync
 CACHE_STORE=file
 LICENSE_SELF_HOSTED_ENABLED=true
 LICENSE_ENFORCE=true
+LICENSE_PUBLIC_KEY=test-public-key
 ENV);
     chmod($workspace.'/artisan', 0755);
 
@@ -263,7 +416,7 @@ BASH);
 
     $scriptPath = selfHostedRepoPath('install-selfhosted.sh');
     $command = sprintf(
-        'ALLOW_NON_ROOT=1 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s PHP_BIN=%s APT_GET_BIN=%s SYSTEMCTL_BIN=%s VISUDO_BIN=%s RUN_COMPOSER_INSTALL=0 RUN_NPM_BUILD=0 RUN_SUPER_ADMIN_SETUP=0 RUN_WIREGUARD_SYSTEM_BOOTSTRAP=1 WG_SYSTEM_DIR=%s WG_SUDOERS_PATH=%s WG_SYNC_HELPER_PATH=%s bash %s install',
+        'ALLOW_NON_ROOT=1 RUN_SYSTEM_BOOTSTRAP=0 APP_DIR=%s EXPECTED_APP_DIR=%s DB_CONNECTION=sqlite DB_DATABASE=%s PHP_BIN=%s APT_GET_BIN=%s SYSTEMCTL_BIN=%s VISUDO_BIN=%s RUN_COMPOSER_INSTALL=0 RUN_NPM_BUILD=0 RUN_SUPER_ADMIN_SETUP=0 RUN_WIREGUARD_SYSTEM_BOOTSTRAP=1 WG_SYSTEM_DIR=%s WG_SUDOERS_PATH=%s WG_SYNC_HELPER_PATH=%s bash %s install --license-public-key %s',
         escapeshellarg($workspace),
         escapeshellarg($workspace),
         escapeshellarg($workspace.'/database/database.sqlite'),
@@ -275,6 +428,7 @@ BASH);
         escapeshellarg($sudoersPath),
         escapeshellarg($workspace.'/scripts/wireguard-apply.sh'),
         escapeshellarg($scriptPath),
+        escapeshellarg('test-public-key'),
     );
 
     exec($command.' 2>&1', $output, $exitCode);
@@ -294,6 +448,7 @@ BASH);
         ->and($helperScript)->toContain($binDirectory.'/systemctl')
         ->and($log)->toContain('apt-get:update')
         ->and($log)->toContain('apt-get:install -y wireguard-tools')
+        ->and($log)->toContain('php:artisan storage:link --force --ansi')
         ->and($log)->toContain('php:artisan wireguard:sync --ansi')
         ->and(file_exists($sudoersPath))->toBeFalse();
 });
