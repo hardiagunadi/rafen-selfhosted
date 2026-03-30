@@ -65,6 +65,94 @@ class HotspotUserController extends Controller
         ]);
     }
 
+    public function datatable(Request $request): JsonResponse
+    {
+        $draw = (int) $request->input('draw', 1);
+        $start = (int) $request->input('start', 0);
+        $length = (int) $request->input('length', 10);
+        $search = trim((string) $request->input('search.value', ''));
+
+        $query = HotspotUser::query()
+            ->with(['hotspotProfile'])
+            ->latest();
+
+        $total = (clone $query)->count();
+
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search): void {
+                $builder->where('customer_name', 'like', "%{$search}%")
+                    ->orWhere('customer_id', 'like', "%{$search}%")
+                    ->orWhere('username', 'like', "%{$search}%");
+            });
+        }
+
+        $filtered = (clone $query)->count();
+
+        $users = $query->skip($start)->take($length > 0 ? $length : 10)->get();
+
+        $data = $users->map(function (HotspotUser $hotspotUser): array {
+            $renewButton = '<button type="button" class="btn btn-success btn-sm" data-ajax-post="'.route('super-admin.settings.hotspot-users.renew', $hotspotUser).'" data-confirm="Perpanjang layanan hotspot ini?"><i class="fas fa-redo-alt mr-1"></i>Perpanjang</button>';
+
+            return [
+                'checkbox' => '<input type="checkbox" name="ids[]" value="'.$hotspotUser->id.'">',
+                'customer_id' => '<a href="#" class="toggle-status-btn badge badge-'.($hotspotUser->status_akun === 'enable' ? 'success' : 'danger').'" data-toggle-url="'.route('super-admin.settings.hotspot-users.toggle-status', $hotspotUser).'">'.e($hotspotUser->customer_id ?? '-').'</a>',
+                'nama' => '<a href="'.route('super-admin.settings.hotspot-users.edit', $hotspotUser).'" class="font-weight-bold text-dark">'.e($hotspotUser->customer_name).'</a>',
+                'username' => e($hotspotUser->username ?? '-'),
+                'profil' => e($hotspotUser->hotspotProfile?->name ?? '-'),
+                'jatuh_tempo' => e($hotspotUser->jatuh_tempo?->format('Y-m-d') ?? '-'),
+                'status' => '<span class="badge badge-'.($hotspotUser->status_akun === 'enable' ? 'success' : ($hotspotUser->status_akun === 'isolir' ? 'warning' : 'secondary')).'">'.e(strtoupper((string) $hotspotUser->status_akun)).'</span>',
+                'perpanjang' => '<div class="btn-group btn-group-sm">'.$renewButton.'</div>',
+                'aksi' => '<div class="btn-group btn-group-sm">'
+                    .'<a href="'.route('super-admin.settings.hotspot-users.edit', $hotspotUser).'" class="btn btn-warning text-white" title="Edit"><i class="fas fa-pen"></i></a>'
+                    .'<button type="button" class="btn btn-danger" data-ajax-delete="'.route('super-admin.settings.hotspot-users.destroy', $hotspotUser).'" title="Hapus"><i class="fas fa-trash"></i></button>'
+                    .'</div>',
+            ];
+        });
+
+        return response()->json([
+            'draw' => $draw,
+            'recordsTotal' => $total,
+            'recordsFiltered' => $filtered,
+            'data' => $data,
+        ]);
+    }
+
+    public function autocomplete(Request $request): JsonResponse
+    {
+        $keyword = trim((string) $request->input('q', ''));
+
+        if (mb_strlen($keyword) < 2) {
+            return response()->json(['data' => []]);
+        }
+
+        $data = HotspotUser::query()
+            ->where(function ($builder) use ($keyword): void {
+                $builder->where('customer_name', 'like', "%{$keyword}%")
+                    ->orWhere('customer_id', 'like', "%{$keyword}%")
+                    ->orWhere('username', 'like', "%{$keyword}%");
+            })
+            ->latest()
+            ->limit(8)
+            ->get(['customer_name', 'customer_id', 'username'])
+            ->map(function (HotspotUser $hotspotUser): array {
+                $displayName = trim((string) ($hotspotUser->customer_name ?: $hotspotUser->username ?: $hotspotUser->customer_id));
+
+                return [
+                    'value' => $displayName,
+                    'label' => sprintf(
+                        '%s | %s | %s',
+                        $hotspotUser->customer_id ?? '-',
+                        $hotspotUser->username ?? '-',
+                        $hotspotUser->customer_name ?? '-',
+                    ),
+                ];
+            })
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $data]);
+    }
+
     public function store(StoreHotspotUserRequest $request): RedirectResponse
     {
         HotspotUser::query()->create($this->prepareData($request->validated()));
@@ -83,9 +171,13 @@ class HotspotUserController extends Controller
             ->with('success', 'Pelanggan Hotspot berhasil diperbarui.');
     }
 
-    public function destroy(HotspotUser $hotspotUser): RedirectResponse
+    public function destroy(HotspotUser $hotspotUser): JsonResponse|RedirectResponse
     {
         $hotspotUser->delete();
+
+        if (request()->wantsJson()) {
+            return response()->json(['status' => 'Pelanggan Hotspot berhasil dihapus.']);
+        }
 
         return redirect()
             ->route('super-admin.settings.hotspot-users.index')
@@ -110,6 +202,33 @@ class HotspotUserController extends Controller
         return redirect()
             ->route('super-admin.settings.hotspot-users.index')
             ->with('success', $ids->count().' pelanggan Hotspot berhasil dihapus.');
+    }
+
+    public function renew(HotspotUser $hotspotUser): JsonResponse|RedirectResponse
+    {
+        $baseDate = $hotspotUser->jatuh_tempo && $hotspotUser->jatuh_tempo->isFuture()
+            ? $hotspotUser->jatuh_tempo->copy()
+            : now();
+
+        $newDueDate = $hotspotUser->hotspotProfile?->computeExpiredAt($baseDate->copy())
+            ?? $baseDate->copy()->addMonth();
+
+        $hotspotUser->update([
+            'jatuh_tempo' => $newDueDate->toDateString(),
+            'status_registrasi' => 'aktif',
+            'status_bayar' => 'belum_bayar',
+            'status_akun' => 'enable',
+        ]);
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'status' => 'Layanan hotspot berhasil diperpanjang.',
+            ]);
+        }
+
+        return redirect()
+            ->route('super-admin.settings.hotspot-users.edit', $hotspotUser)
+            ->with('success', 'Layanan hotspot berhasil diperpanjang.');
     }
 
     public function toggleStatus(HotspotUser $hotspotUser): JsonResponse

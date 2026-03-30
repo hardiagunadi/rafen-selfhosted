@@ -11,8 +11,11 @@ Route::middleware(['auth', 'system.license', 'system.feature:radius', SuperAdmin
         Route::get('/', [HotspotUserController::class, 'index'])->name('index');
         Route::get('/create', [HotspotUserController::class, 'create'])->name('create');
         Route::get('/customer-id', [HotspotUserController::class, 'generateCustomerId'])->name('customer-id');
+        Route::get('/datatable', [HotspotUserController::class, 'datatable'])->name('datatable');
+        Route::get('/autocomplete', [HotspotUserController::class, 'autocomplete'])->name('autocomplete');
         Route::delete('/bulk-destroy', [HotspotUserController::class, 'bulkDestroy'])->name('bulk-destroy');
         Route::post('/', [HotspotUserController::class, 'store'])->name('store');
+        Route::post('/{hotspotUser}/renew', [HotspotUserController::class, 'renew'])->name('renew');
         Route::post('/{hotspotUser}/toggle-status', [HotspotUserController::class, 'toggleStatus'])->name('toggle-status');
         Route::get('/{hotspotUser}', [HotspotUserController::class, 'show'])->name('show');
         Route::get('/{hotspotUser}/edit', [HotspotUserController::class, 'edit'])->name('edit');

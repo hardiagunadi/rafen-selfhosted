@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\PppProfile;
 use App\Models\PppUser;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -151,9 +152,15 @@ class InvoiceController extends Controller
             ->with('success', 'Invoice dibayar.');
     }
 
-    public function renew(Invoice $invoice): RedirectResponse
+    public function renew(Invoice $invoice): JsonResponse|RedirectResponse
     {
         if ($invoice->isPaid()) {
+            if (request()->wantsJson()) {
+                return response()->json([
+                    'status' => 'Invoice yang sudah lunas tidak perlu diperpanjang.',
+                ], 422);
+            }
+
             return redirect()
                 ->route('super-admin.invoices.show', $invoice)
                 ->with('error', 'Invoice yang sudah lunas tidak perlu diperpanjang.');
@@ -179,6 +186,12 @@ class InvoiceController extends Controller
                 'jatuh_tempo' => $newDueDate->toDateString(),
             ]);
         });
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'status' => 'Layanan berhasil diperpanjang. Status pelanggan aktif dan belum bayar.',
+            ]);
+        }
 
         return redirect()
             ->route('super-admin.invoices.show', $invoice)
