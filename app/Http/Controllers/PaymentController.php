@@ -9,11 +9,20 @@ class PaymentController extends Controller
 {
     public function index(): View
     {
+        $payments = Payment::query()
+            ->with('invoice')
+            ->latest()
+            ->get();
+
         return view('super-admin.payments', [
-            'payments' => Payment::query()
-                ->with('invoice')
-                ->latest()
-                ->get(),
+            'payments' => $payments,
+            'paymentStats' => [
+                'total_payment' => $payments->count(),
+                'paid_payment' => $payments->where('status', 'paid')->count(),
+                'cash_payment' => $payments->where('payment_method', 'cash')->count(),
+                'transfer_payment' => $payments->where('payment_method', 'transfer')->count(),
+                'total_amount' => (float) $payments->sum('total_amount'),
+            ],
         ]);
     }
 

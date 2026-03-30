@@ -81,9 +81,16 @@ class InvoiceController extends Controller
             ->with('success', 'Invoice berhasil dibuat.');
     }
 
-    public function pay(PayInvoiceRequest $request, Invoice $invoice): RedirectResponse
+    public function pay(PayInvoiceRequest $request, Invoice $invoice): JsonResponse|RedirectResponse
     {
         if ($invoice->isPaid()) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'status' => 'Invoice sudah dibayar.',
+                    'redirect_url' => route('super-admin.invoices.show', $invoice),
+                ], 422);
+            }
+
             return redirect()
                 ->route('super-admin.invoices.show', $invoice)
                 ->with('success', 'Invoice sudah dibayar.');
@@ -103,7 +110,7 @@ class InvoiceController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($invoice, $paymentMethod, $cashReceived, $transferAmount, $paidAmount, $validated): void {
+        $payment = DB::transaction(function () use ($invoice, $paymentMethod, $cashReceived, $transferAmount, $paidAmount, $validated): Payment {
             $channel = match ($paymentMethod) {
                 'cash' => 'manual_cash',
                 'transfer' => 'manual_transfer',
@@ -145,7 +152,16 @@ class InvoiceController extends Controller
                     'status_akun' => 'enable',
                 ]);
             }
+
+            return $payment;
         });
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'status' => 'Invoice dibayar.',
+                'redirect_url' => route('super-admin.payments.show', $payment),
+            ]);
+        }
 
         return redirect()
             ->route('super-admin.invoices.show', $invoice)
@@ -198,9 +214,15 @@ class InvoiceController extends Controller
             ->with('success', 'Layanan diperpanjang. Status: Aktif - Belum Bayar.');
     }
 
-    public function destroy(Invoice $invoice): RedirectResponse
+    public function destroy(Invoice $invoice): JsonResponse|RedirectResponse
     {
         $invoice->delete();
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'status' => 'Invoice berhasil dihapus.',
+            ]);
+        }
 
         return redirect()
             ->route('super-admin.invoices.index')
@@ -230,6 +252,18 @@ class InvoiceController extends Controller
             'total_amount' => (float) $unpaidInvoices->sum('total'),
             'oldest_month_label' => $monthlyDebt->first()['month_label'] ?? '-',
         ];
+        $invoiceStats = [
+            'total_invoice' => Invoice::query()->count(),
+            'invoice_paid' => Invoice::query()->where('status', 'paid')->count(),
+            'invoice_unpaid' => Invoice::query()->where('status', 'unpaid')->count(),
+            'invoice_overdue' => Invoice::query()
+                ->where('status', 'unpaid')
+                ->whereNotNull('due_date')
+                ->whereDate('due_date', '<', now()->toDateString())
+                ->count(),
+            'nominal_paid' => (float) Invoice::query()->where('status', 'paid')->sum('total'),
+            'nominal_unpaid' => (float) $unpaidInvoices->sum('total'),
+        ];
 
         return view('super-admin.invoices', [
             'pageTitle' => $title,
@@ -238,6 +272,7 @@ class InvoiceController extends Controller
             'invoices' => $invoices,
             'monthlyDebt' => $monthlyDebt,
             'unpaidSummary' => $unpaidSummary,
+            'invoiceStats' => $invoiceStats,
             'pppUsers' => PppUser::query()->with('profile')->orderBy('customer_name')->get(),
         ]);
     }
