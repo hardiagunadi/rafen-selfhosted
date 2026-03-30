@@ -26,11 +26,12 @@
             --app-text-soft: #5b6b83;
         }
 
-        body.layout-top-nav {
+        body {
             background:
                 radial-gradient(circle at 8% -8%, rgba(14, 116, 144, 0.1), transparent 30%),
                 radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.07), transparent 24%),
                 var(--app-bg);
+            overflow-x: hidden;
         }
 
         .content-wrapper,
@@ -173,6 +174,7 @@
             position: relative;
             border-right: 1px solid rgba(148, 163, 184, 0.24);
             background: linear-gradient(180deg, #081527 0%, #0d2035 48%, #102a44 100%);
+            overflow: hidden;
         }
 
         .main-sidebar.sidebar-modern::before {
@@ -195,19 +197,24 @@
         .sidebar-modern .brand-link {
             border-bottom: 1px solid rgba(148, 163, 184, 0.2);
             background: linear-gradient(110deg, rgba(15, 118, 168, 0.35), rgba(14, 165, 233, 0.14));
-            padding-top: 0.95rem;
-            padding-bottom: 0.95rem;
+            padding: 0.9rem 0.9rem 0.85rem;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             gap: 0.55rem;
+            overflow: hidden;
         }
 
         .sidebar-modern .brand-text {
             color: #f8fbff;
-            font-weight: 700;
+            font-weight: 600;
+            font-size: 1.05rem;
             letter-spacing: 0.015em;
             text-shadow: 0 2px 10px rgba(15, 23, 42, 0.35);
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .sidebar-modern .brand-logo-mark {
@@ -223,14 +230,41 @@
 
         .sidebar-modern .sidebar {
             height: calc(100% - 57px);
-            padding-top: 0.6rem;
+            padding: 0.75rem 0 1.1rem;
             overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .sidebar-modern .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .sidebar-modern .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 999px;
+        }
+
+        .sidebar-modern .nav-sidebar {
+            padding: 0 0.55rem;
+        }
+
+        .sidebar-modern .nav-header {
+            color: rgba(191, 219, 254, 0.62);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding: 0.9rem 0.75rem 0.4rem;
         }
 
         .sidebar-modern .nav-sidebar .nav-link {
+            display: flex;
+            align-items: center;
             color: rgba(231, 245, 255, 0.88);
-            border-radius: 10px;
-            margin: 0.1rem 0.6rem;
+            border-radius: 12px;
+            margin: 0.12rem 0;
+            padding: 0.72rem 0.82rem;
+            min-height: 44px;
         }
 
         .sidebar-modern .nav-sidebar .nav-link:hover,
@@ -247,7 +281,34 @@
         }
 
         .sidebar-modern .nav-sidebar .nav-icon {
+            flex: 0 0 1.35rem;
             color: rgba(191, 219, 254, 0.95);
+            font-size: 0.92rem;
+            margin-right: 0.75rem;
+            text-align: center;
+        }
+
+        .sidebar-modern .nav-sidebar .nav-link p {
+            margin: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.95rem;
+            line-height: 1.2;
+        }
+
+        .sidebar-modern .nav-sidebar .nav-item + .nav-header {
+            margin-top: 0.3rem;
+        }
+
+        @media (max-width: 991.98px) {
+            .sidebar-modern .brand-text {
+                font-size: 1rem;
+            }
+
+            .sidebar-modern .nav-sidebar .nav-link {
+                padding: 0.68rem 0.78rem;
+            }
         }
 
         .alert {
@@ -292,6 +353,7 @@
                 <nav class="mt-2 pb-3">
                     <ul class="nav nav-pills nav-sidebar flex-column" role="menu">
                         <li class="nav-item"><a href="{{ auth()->check() && ! auth()->user()->isSuperAdmin() ? route('shifts.my') : route('super-admin.dashboard') }}" class="nav-link {{ request()->routeIs('super-admin.dashboard', 'shifts.my') ? 'active' : '' }}"><i class="nav-icon fas fa-tachometer-alt"></i><p>Dashboard</p></a></li>
+                        <li class="nav-header">Operasional</li>
                         @if(($systemFeatureFlags['radius'] ?? true) === true)
                             <li class="nav-item"><a href="{{ route('super-admin.sessions.pppoe') }}" class="nav-link {{ request()->routeIs('super-admin.sessions.pppoe*') ? 'active' : '' }}"><i class="nav-icon fas fa-signal"></i><p>Sesi PPP</p></a></li>
                             <li class="nav-item"><a href="{{ route('super-admin.sessions.hotspot') }}" class="nav-link {{ request()->routeIs('super-admin.sessions.hotspot*') ? 'active' : '' }}"><i class="nav-icon fas fa-broadcast-tower"></i><p>Sesi Hotspot</p></a></li>
@@ -301,6 +363,7 @@
                             <li class="nav-item"><a href="{{ route('super-admin.customer-map.index') }}" class="nav-link {{ request()->routeIs('super-admin.customer-map.*') ? 'active' : '' }}"><i class="nav-icon fas fa-map-marked-alt"></i><p>Peta Pelanggan</p></a></li>
                             <li class="nav-item"><a href="{{ route('super-admin.odps.index') }}" class="nav-link {{ request()->routeIs('super-admin.odps.*') ? 'active' : '' }}"><i class="nav-icon fas fa-project-diagram"></i><p>ODP</p></a></li>
                         @endif
+                        <li class="nav-header">Infrastruktur</li>
                         <li class="nav-item"><a href="{{ route('super-admin.settings.mikrotik.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.mikrotik.*') ? 'active' : '' }}"><i class="nav-icon fas fa-server"></i><p>MikroTik</p></a></li>
                         @if(($systemFeatureFlags['olt'] ?? true) === true)
                             <li class="nav-item"><a href="{{ route('super-admin.settings.olt.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.olt.*') ? 'active' : '' }}"><i class="nav-icon fas fa-broadcast-tower"></i><p>OLT</p></a></li>
@@ -309,6 +372,7 @@
                             <li class="nav-item"><a href="{{ route('super-admin.settings.cpe.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.cpe.*') ? 'active' : '' }}"><i class="nav-icon fas fa-network-wired"></i><p>CPE</p></a></li>
                         @endif
                         @if(($systemFeatureFlags['radius'] ?? true) === true)
+                            <li class="nav-header">Billing</li>
                             <li class="nav-item"><a href="{{ route('super-admin.settings.bandwidth-profiles.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.bandwidth-profiles.*') ? 'active' : '' }}"><i class="nav-icon fas fa-tachometer-alt"></i><p>Bandwidth</p></a></li>
                             <li class="nav-item"><a href="{{ route('super-admin.settings.profile-groups.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.profile-groups.*') ? 'active' : '' }}"><i class="nav-icon fas fa-layer-group"></i><p>Profile Group</p></a></li>
                             <li class="nav-item"><a href="{{ route('super-admin.settings.hotspot-profiles.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.hotspot-profiles.*') ? 'active' : '' }}"><i class="nav-icon fas fa-box"></i><p>Paket Hotspot</p></a></li>
@@ -320,6 +384,7 @@
                             <li class="nav-item"><a href="{{ route('super-admin.settings.radius-accounts.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.radius-accounts.*') ? 'active' : '' }}"><i class="nav-icon fas fa-id-card"></i><p>Radius Accounts</p></a></li>
                             <li class="nav-item"><a href="{{ route('super-admin.settings.freeradius.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.freeradius.*') ? 'active' : '' }}"><i class="nav-icon fas fa-shield-alt"></i><p>FreeRADIUS</p></a></li>
                         @endif
+                        <li class="nav-header">Layanan</li>
                         @if(($systemFeatureFlags['genieacs'] ?? true) === true)
                             <li class="nav-item"><a href="{{ route('super-admin.settings.genieacs.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.genieacs.*') ? 'active' : '' }}"><i class="nav-icon fas fa-cogs"></i><p>GenieACS</p></a></li>
                         @endif
@@ -333,6 +398,7 @@
                             <li class="nav-item"><a href="{{ route('super-admin.wa-keyword-rules.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-keyword-rules.*') ? 'active' : '' }}"><i class="nav-icon fas fa-key"></i><p>Keyword WA</p></a></li>
                             <li class="nav-item"><a href="{{ route('super-admin.wa-tickets.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-tickets.*') ? 'active' : '' }}"><i class="nav-icon fas fa-life-ring"></i><p>Tiket WA</p></a></li>
                         @endif
+                        <li class="nav-header">Administrasi</li>
                         <li class="nav-item"><a href="{{ route('super-admin.outages.index') }}" class="nav-link {{ request()->routeIs('super-admin.outages.*') ? 'active' : '' }}"><i class="nav-icon fas fa-exclamation-triangle"></i><p>Gangguan</p></a></li>
                         <li class="nav-item"><a href="{{ route('shifts.my') }}" class="nav-link {{ request()->routeIs('shifts.*') ? 'active' : '' }}"><i class="nav-icon fas fa-user-clock"></i><p>Shift</p></a></li>
                         <li class="nav-item"><a href="{{ route('super-admin.users.index') }}" class="nav-link {{ request()->routeIs('super-admin.users.*') ? 'active' : '' }}"><i class="nav-icon fas fa-user-cog"></i><p>Pengguna</p></a></li>
