@@ -10,21 +10,53 @@ use App\Models\PppUser;
 use App\Models\ProfileGroup;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PppUserController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        return view('super-admin.settings.ppp-users', [
-            'pppUsers' => PppUser::query()
-                ->with(['profile.bandwidthProfile', 'profileGroup', 'odp'])
-                ->latest()
-                ->get(),
-            'pppProfiles' => PppProfile::query()->orderBy('name')->get(),
-            'profileGroups' => ProfileGroup::query()->orderBy('name')->get(),
-            'odps' => Odp::query()->orderBy('code')->get(),
+        $search = trim((string) $request->input('search', ''));
+        $perPage = max(10, (int) $request->input('per_page', 10));
+
+        $query = PppUser::query()
+            ->with(['profile.bandwidthProfile', 'profileGroup', 'odp'])
+            ->latest();
+
+        if ($search !== '') {
+            $query->where(function ($builder) use ($search): void {
+                $builder->where('customer_name', 'like', "%{$search}%")
+                    ->orWhere('customer_id', 'like', "%{$search}%")
+                    ->orWhere('username', 'like', "%{$search}%");
+            });
+        }
+
+        $pppUsers = $query->paginate($perPage)->withQueryString();
+
+        return view('ppp_users.index', [
+            'pppUsers' => $pppUsers,
+            'stats' => $this->stats(),
+            'search' => $search,
+            'perPage' => $perPage,
         ]);
+    }
+
+    public function create(): View
+    {
+        return view('ppp_users.create', $this->formData());
+    }
+
+    public function show(PppUser $pppUser): RedirectResponse
+    {
+        return redirect()->route('super-admin.settings.ppp-users.edit', $pppUser);
+    }
+
+    public function edit(PppUser $pppUser): View
+    {
+        return view('ppp_users.edit', $this->formData([
+            'pppUser' => $pppUser,
+        ]));
     }
 
     public function generateCustomerId(): JsonResponse
@@ -48,7 +80,7 @@ class PppUserController extends Controller
         $pppUser->update($this->prepareData($request->validated(), $pppUser));
 
         return redirect()
-            ->route('super-admin.settings.ppp-users.index')
+            ->route('super-admin.settings.ppp-users.edit', $pppUser)
             ->with('success', 'Pelanggan PPP berhasil diperbarui.');
     }
 
@@ -59,6 +91,67 @@ class PppUserController extends Controller
         return redirect()
             ->route('super-admin.settings.ppp-users.index')
             ->with('success', 'Pelanggan PPP berhasil dihapus.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $ids = collect($request->input('ids', []))
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return redirect()
+                ->route('super-admin.settings.ppp-users.index')
+                ->with('error', 'Pilih pelanggan PPP terlebih dahulu.');
+        }
+
+        PppUser::query()->whereIn('id', $ids)->delete();
+
+        return redirect()
+            ->route('super-admin.settings.ppp-users.index')
+            ->with('success', $ids->count().' pelanggan PPP berhasil dihapus.');
+    }
+
+    public function toggleStatus(PppUser $pppUser): JsonResponse
+    {
+        $nextStatus = $pppUser->status_akun === 'enable' ? 'disable' : 'enable';
+        $pppUser->update(['status_akun' => $nextStatus]);
+
+        return response()->json([
+            'status' => $nextStatus,
+        ]);
+    }
+
+    private function stats(): array
+    {
+        $now = now();
+
+        return [
+            'registrasi_bulan_ini' => PppUser::query()
+                ->whereMonth('created_at', $now->month)
+                ->whereYear('created_at', $now->year)
+                ->count(),
+            'renewal_bulan_ini' => PppUser::query()
+                ->whereMonth('updated_at', $now->month)
+                ->whereYear('updated_at', $now->year)
+                ->count(),
+            'pelanggan_isolir' => PppUser::query()->where('status_akun', 'isolir')->count(),
+            'akun_disable' => PppUser::query()->where('status_akun', 'disable')->count(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function formData(array $overrides = []): array
+    {
+        return array_merge([
+            'pppProfiles' => PppProfile::query()->orderBy('name')->get(),
+            'profileGroups' => ProfileGroup::query()->orderBy('name')->get(),
+            'odps' => Odp::query()->orderBy('code')->get(),
+        ], $overrides);
     }
 
     private function prepareData(array $data, ?PppUser $pppUser = null): array

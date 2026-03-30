@@ -9,8 +9,13 @@ Route::middleware(['auth', 'system.license', 'system.feature:radius', SuperAdmin
     ->name('super-admin.settings.hotspot-users.')
     ->group(function (): void {
         Route::get('/', [HotspotUserController::class, 'index'])->name('index');
+        Route::get('/create', [HotspotUserController::class, 'create'])->name('create');
         Route::get('/customer-id', [HotspotUserController::class, 'generateCustomerId'])->name('customer-id');
+        Route::delete('/bulk-destroy', [HotspotUserController::class, 'bulkDestroy'])->name('bulk-destroy');
         Route::post('/', [HotspotUserController::class, 'store'])->name('store');
+        Route::post('/{hotspotUser}/toggle-status', [HotspotUserController::class, 'toggleStatus'])->name('toggle-status');
+        Route::get('/{hotspotUser}', [HotspotUserController::class, 'show'])->name('show');
+        Route::get('/{hotspotUser}/edit', [HotspotUserController::class, 'edit'])->name('edit');
         Route::put('/{hotspotUser}', [HotspotUserController::class, 'update'])->name('update');
         Route::delete('/{hotspotUser}', [HotspotUserController::class, 'destroy'])->name('destroy');
     });

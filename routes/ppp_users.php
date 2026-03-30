@@ -9,8 +9,13 @@ Route::middleware(['auth', 'system.license', 'system.feature:radius', SuperAdmin
     ->name('super-admin.settings.ppp-users.')
     ->group(function (): void {
         Route::get('/', [PppUserController::class, 'index'])->name('index');
+        Route::get('/create', [PppUserController::class, 'create'])->name('create');
         Route::get('/customer-id', [PppUserController::class, 'generateCustomerId'])->name('customer-id');
+        Route::delete('/bulk-destroy', [PppUserController::class, 'bulkDestroy'])->name('bulk-destroy');
         Route::post('/', [PppUserController::class, 'store'])->name('store');
+        Route::post('/{pppUser}/toggle-status', [PppUserController::class, 'toggleStatus'])->name('toggle-status');
+        Route::get('/{pppUser}', [PppUserController::class, 'show'])->name('show');
+        Route::get('/{pppUser}/edit', [PppUserController::class, 'edit'])->name('edit');
         Route::put('/{pppUser}', [PppUserController::class, 'update'])->name('update');
         Route::delete('/{pppUser}', [PppUserController::class, 'destroy'])->name('destroy');
     });
