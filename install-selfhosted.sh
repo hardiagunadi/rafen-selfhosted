@@ -290,8 +290,7 @@ installer_exec_user() {
 run_in_app_as_installer_user() {
     local install_user
     local install_group
-    local quoted_command=()
-    local arg
+    local command_string
 
     install_user="$(installer_exec_user)"
     install_group="$DEPLOY_GROUP"
@@ -306,11 +305,10 @@ run_in_app_as_installer_user() {
         return
     fi
 
-    for arg in "$@"; do
-        quoted_command+=("$(shell_quote "$arg")")
-    done
+    printf -v command_string '%q ' "$@"
+    command_string="${command_string% }"
 
-    run_command runuser -u "$install_user" -g "$install_group" -- /bin/bash -lc "cd $(shell_quote "$APP_DIR") && ${quoted_command[*]}"
+    run_command runuser -u "$install_user" -g "$install_group" -- /bin/bash -lc "cd $(shell_quote "$APP_DIR") && $command_string"
 }
 
 ensure_expected_app_dir() {
