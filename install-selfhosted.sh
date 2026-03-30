@@ -1198,6 +1198,12 @@ npm_build() {
     fi
 
     [ -f "$APP_DIR/package.json" ] || return
+    [ -f "$APP_DIR/vite.config.js" ] || return
+
+    if [ ! -f "$APP_DIR/resources/css/app.css" ] || [ ! -f "$APP_DIR/resources/js/app.js" ]; then
+        warn "Entry Vite default tidak ditemukan (resources/css/app.css atau resources/js/app.js). Melewati npm build untuk installer ini."
+        return
+    fi
 
     command_exists "$NPM_BIN" || fail "npm tidak ditemukan: $NPM_BIN"
     check_node_runtime_requirements
