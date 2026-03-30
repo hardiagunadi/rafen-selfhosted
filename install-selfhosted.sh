@@ -18,6 +18,7 @@ SYSTEM_TIMEZONE="${SYSTEM_TIMEZONE:-Asia/Jakarta}"
 PHP_PREFERRED_VERSION="${PHP_PREFERRED_VERSION:-8.4}"
 PHP_BIN_EXPLICIT="${PHP_BIN+x}"
 PHP_BIN="${PHP_BIN:-php}"
+NODE_PREFERRED_MAJOR="${NODE_PREFERRED_MAJOR:-22}"
 COMPOSER_BIN="${COMPOSER_BIN:-composer}"
 NPM_BIN="${NPM_BIN:-npm}"
 APT_GET_BIN="${APT_GET_BIN:-apt-get}"
@@ -108,7 +109,7 @@ Options:
 
 Env overrides:
   APP_DIR, EXPECTED_APP_DIR, ENV_FILE, DEPLOY_USER, DEPLOY_GROUP, DEPLOY_PASSWORD,
-  APP_USER, APP_GROUP, SYSTEM_TIMEZONE, PHP_PREFERRED_VERSION,
+  APP_USER, APP_GROUP, SYSTEM_TIMEZONE, PHP_PREFERRED_VERSION, NODE_PREFERRED_MAJOR,
   PHP_BIN, COMPOSER_BIN, NPM_BIN, APT_GET_BIN, SYSTEMCTL_BIN, VISUDO_BIN,
   NGINX_BIN, NGINX_SERVICE, ALLOW_NON_ROOT, RUN_COMPOSER_INSTALL, RUN_NPM_BUILD, RUN_MIGRATE,
   RUN_SUPER_ADMIN_SETUP, RUN_SYSTEM_BOOTSTRAP, RUN_WIREGUARD_SYSTEM_BOOTSTRAP, LICENSE_PUBLIC_KEY_VALUE,
@@ -277,6 +278,18 @@ apt_package_exists() {
     apt-cache show "$1" >/dev/null 2>&1
 }
 
+detect_node_major_version() {
+    local node_bin
+    local version
+
+    node_bin="$(command -v node || true)"
+    [ -n "$node_bin" ] || return 1
+
+    version="$("$node_bin" -v 2>/dev/null || true)"
+    version="${version#v}"
+    printf '%s' "${version%%.*}"
+}
+
 read_os_release_value() {
     local key="$1"
 
@@ -355,6 +368,53 @@ ensure_php_apt_repository() {
 
     apt_package_exists "php${PHP_PREFERRED_VERSION}" || fail "Repository PHP tambahan sudah dicoba, tetapi paket php${PHP_PREFERRED_VERSION} masih belum tersedia."
     apt_package_exists "php${PHP_PREFERRED_VERSION}-fpm" || fail "Repository PHP tambahan sudah dicoba, tetapi paket php${PHP_PREFERRED_VERSION}-fpm masih belum tersedia."
+}
+
+ensure_node_apt_repository() {
+    local current_node_major
+    local os_id
+
+    current_node_major="$(detect_node_major_version || true)"
+
+    if [ -n "$current_node_major" ] && [ "$current_node_major" -ge "$NODE_PREFERRED_MAJOR" ]; then
+        return
+    fi
+
+    os_id="$(read_os_release_value ID || true)"
+
+    case "$os_id" in
+        ubuntu|debian)
+            info "Menyiapkan Node.js ${NODE_PREFERRED_MAJOR}.x repository untuk build frontend."
+            run_command "$APT_GET_BIN" install -y ca-certificates curl gnupg
+            install_dir /etc/apt/keyrings
+
+            if [ "$DRY_RUN" = "1" ]; then
+                printf '[DRY-RUN] download NodeSource key to /etc/apt/keyrings/nodesource.gpg\n'
+                printf '[DRY-RUN] write file /etc/apt/sources.list.d/nodesource.list\n'
+            else
+                curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+                printf 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_%s.x nodistro main\n' "$NODE_PREFERRED_MAJOR" >/etc/apt/sources.list.d/nodesource.list
+            fi
+
+            run_command "$APT_GET_BIN" update
+            ;;
+        *)
+            fail "Node.js ${NODE_PREFERRED_MAJOR}.x belum tersedia dan distro ${os_id:-unknown} belum didukung untuk bootstrap repository Node otomatis."
+            ;;
+    esac
+}
+
+check_node_runtime_requirements() {
+    local current_node_major
+
+    if [ "$RUN_NPM_BUILD" != "1" ]; then
+        return
+    fi
+
+    current_node_major="$(detect_node_major_version || true)"
+
+    [ -n "$current_node_major" ] || fail "Node.js tidak ditemukan. Installer membutuhkan Node.js ${NODE_PREFERRED_MAJOR}.x untuk build frontend."
+    [ "$current_node_major" -ge "$NODE_PREFERRED_MAJOR" ] || fail "Node.js $(node -v 2>/dev/null || printf unknown) terlalu lama. Installer membutuhkan Node.js ${NODE_PREFERRED_MAJOR}.x atau lebih baru untuk build frontend."
 }
 
 run_command() {
@@ -819,6 +879,7 @@ install_system_packages() {
     run_command "$APT_GET_BIN" update
 
     ensure_php_apt_repository
+    ensure_node_apt_repository
 
     run_command "$APT_GET_BIN" install -y \
         nginx \
@@ -827,7 +888,6 @@ install_system_packages() {
         curl \
         composer \
         nodejs \
-        npm \
         "php${PHP_PREFERRED_VERSION}" \
         "php${PHP_PREFERRED_VERSION}-cli" \
         "php${PHP_PREFERRED_VERSION}-fpm" \
@@ -1140,6 +1200,7 @@ npm_build() {
     [ -f "$APP_DIR/package.json" ] || return
 
     command_exists "$NPM_BIN" || fail "npm tidak ditemukan: $NPM_BIN"
+    check_node_runtime_requirements
     run_in_app_as_installer_user "$NPM_BIN" install
     run_in_app_as_installer_user "$NPM_BIN" run build
 }
@@ -1236,6 +1297,7 @@ show_status() {
     printf 'Nginx Site           : %s\n' "$NGINX_SITE_AVAILABLE_PATH"
     printf 'Preferred PHP        : %s\n' "$PHP_PREFERRED_VERSION"
     printf 'PHP CLI Binary       : %s\n' "$(resolve_php_cli_bin)"
+    printf 'Preferred Node.js    : %s.x\n' "$NODE_PREFERRED_MAJOR"
     printf 'PHP-FPM Service      : %s\n' "$(detect_php_fpm_service)"
     printf 'WG Helper Path       : %s\n' "$WG_SYNC_HELPER_PATH"
     printf 'WG System Service    : %s\n' "$WG_SYSTEM_SERVICE"
