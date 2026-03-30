@@ -56,6 +56,24 @@ Installer mendukung tiga mode akses:
 
 Mode aktif bisa dicek lewat perintah `status`.
 
+## Issue Lisensi Tanpa Domain
+
+Flow lisensi self-hosted mendukung instalasi tanpa domain final.
+
+Praktik yang disarankan:
+- install server lebih dulu dalam mode `ip-based`
+- unduh activation request dari halaman lisensi self-hosted
+- issue lisensi dari panel SaaS dengan mode `Fingerprint Only` atau `IP-Based`
+- upload file lisensi ke self-hosted
+- bila domain final baru tersedia belakangan, domain bisa dicatat pada siklus issue lisensi berikutnya tanpa mengubah pola instalasi awal
+
+Activation request self-hosted sekarang menyertakan konteks berikut agar vendor lebih mudah menerbitkan lisensi:
+- `APP_URL`
+- host dari `APP_URL`
+- `server_name`
+- fingerprint server
+- rekomendasi mode akses awal
+
 ## Requirement Runtime
 
 - PHP CLI dan PHP-FPM diprioritaskan ke `8.4.x`

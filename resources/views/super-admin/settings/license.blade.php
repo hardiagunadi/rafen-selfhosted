@@ -11,6 +11,17 @@
         'restricted', 'invalid', 'missing' => 'danger',
         default => 'secondary',
     };
+
+    $formatAccessMode = static function (?string $value): string {
+        return match ($value) {
+            'fingerprint_only' => 'Fingerprint Only',
+            'ip_based' => 'IP-Based',
+            'domain_based' => 'Domain-Based',
+            'hybrid' => 'Hybrid',
+            null, '' => 'Belum Dicatat',
+            default => ucwords(str_replace('_', ' ', $value)),
+        };
+    };
 @endphp
 <div class="container-fluid">
     <div class="row mb-3 align-items-center">
@@ -97,11 +108,17 @@
             <div class="card mt-3">
                 <div class="card-header"><i class="fas fa-fingerprint mr-1"></i> Fingerprint Server</div>
                 <div class="card-body">
-                    <p class="text-muted mb-2">Kirim fingerprint ini ke vendor untuk penerbitan lisensi.</p>
+                    <p class="text-muted mb-2">Kirim activation request atau fingerprint ini ke vendor untuk penerbitan lisensi. Flow ini mendukung instalasi IP-based tanpa domain final.</p>
+                    <div class="small text-muted mb-3">
+                        <div>APP_URL saat ini: <code>{{ config('app.url') }}</code></div>
+                        <div>Host APP_URL: <code>{{ parse_url((string) config('app.url'), PHP_URL_HOST) ?: '-' }}</code></div>
+                        <div>Server name: <code>{{ php_uname('n') }}</code></div>
+                    </div>
                     <textarea class="form-control" rows="3" readonly>{{ $snapshot['expected_fingerprint'] }}</textarea>
                     <a href="{{ route('super-admin.settings.license.activation-request') }}" class="btn btn-outline-primary mt-3">
                         <i class="fas fa-download mr-1"></i> Unduh Activation Request
                     </a>
+                    <small class="form-text text-muted">Jika domain belum siap, biarkan vendor issue lisensi dengan mode fingerprint-only atau IP-based terlebih dahulu. Domain bisa dicatat kemudian saat deployment sudah stabil.</small>
                 </div>
             </div>
         </div>
@@ -161,6 +178,35 @@
                     @else
                         <p class="text-muted mb-0">Belum ada data limit lisensi.</p>
                     @endif
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header"><i class="fas fa-globe mr-1"></i> Mode Akses Lisensi</div>
+                <div class="card-body">
+                    @php
+                        $payload = $license->payload ?? [];
+                        $accessMode = $payload['access_mode'] ?? null;
+                        $allowedHosts = $payload['allowed_hosts'] ?? $license->domains ?? [];
+                    @endphp
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr>
+                                <th class="w-25">Mode</th>
+                                <td>{{ $formatAccessMode($accessMode) }}</td>
+                            </tr>
+                            <tr>
+                                <th>Host/IP</th>
+                                <td>
+                                    @if(! empty($allowedHosts) && is_array($allowedHosts))
+                                        {{ implode(', ', $allowedHosts) }}
+                                    @else
+                                        <span class="text-muted">Belum ada host/IP yang dicatat. Lisensi tetap bisa aktif selama fingerprint cocok.</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
