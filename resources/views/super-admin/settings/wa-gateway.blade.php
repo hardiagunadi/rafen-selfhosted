@@ -71,7 +71,7 @@
                     <div class="card-body">
                         <dl class="row mb-3">
                             <dt class="col-sm-5">Status</dt>
-                            <dd class="col-sm-7">{{ $serviceStatus['pm2_status'] ?? '-' }}</dd>
+                            <dd class="col-sm-7" id="wa-service-status">{{ $serviceStatus['pm2_status'] ?? '-' }}</dd>
                             <dt class="col-sm-5">URL</dt>
                             <dd class="col-sm-7">{{ $serviceStatus['url'] ?? '-' }}</dd>
                             <dt class="col-sm-5">PM2 Home</dt>
@@ -79,19 +79,11 @@
                             <dt class="col-sm-5">Log</dt>
                             <dd class="col-sm-7">{{ $serviceStatus['log_file'] ?? '-' }}</dd>
                         </dl>
+                        <div id="wa-service-result" class="mb-3"></div>
                         <div class="d-flex flex-wrap gap-2">
-                            <form action="{{ route('super-admin.settings.wa-gateway.service', 'status') }}" method="POST" class="mr-2 mb-2">
-                                @csrf
-                                <button type="submit" class="btn btn-outline-secondary btn-sm">Refresh Status</button>
-                            </form>
-                            <form action="{{ route('super-admin.settings.wa-gateway.service', 'ensure-running') }}" method="POST" class="mr-2 mb-2">
-                                @csrf
-                                <button type="submit" class="btn btn-success btn-sm">Ensure Running</button>
-                            </form>
-                            <form action="{{ route('super-admin.settings.wa-gateway.service', 'restart') }}" method="POST" class="mb-2">
-                                @csrf
-                                <button type="submit" class="btn btn-warning btn-sm">Restart Service</button>
-                            </form>
+                            <button type="button" class="btn btn-outline-secondary btn-sm mr-2 mb-2" onclick="controlWaService('status')">Refresh Status</button>
+                            <button type="button" class="btn btn-success btn-sm mr-2 mb-2" onclick="controlWaService('ensure-running')">Ensure Running</button>
+                            <button type="button" class="btn btn-warning btn-sm mb-2" onclick="controlWaService('restart')">Restart Service</button>
                         </div>
                         <form action="{{ route('super-admin.settings.wa-gateway.test-connection') }}" method="POST" class="mt-3">
                             @csrf
@@ -187,19 +179,14 @@
                                         <tr>
                                             <td>{{ $device->device_name }}</td>
                                             <td><code>{{ $device->session_id }}</code></td>
-                                            <td>{{ $device->last_status ?: ($device->is_active ? 'active' : 'inactive') }}</td>
+                                            <td id="device-status-{{ $device->id }}">{{ $device->last_status ?: ($device->is_active ? 'active' : 'inactive') }}</td>
                                             <td>{{ $device->wa_number ?: '-' }}</td>
                                             <td>{{ $device->is_default ? 'Ya' : 'Tidak' }}</td>
                                             <td class="text-right">
                                                 <div class="d-flex justify-content-end flex-wrap">
-                                                    <form action="{{ route('super-admin.settings.wa-gateway.devices.session', [$device, 'status']) }}" method="POST" class="mr-2 mb-1">
-                                                        @csrf
-                                                        <button type="submit" class="btn btn-outline-secondary btn-xs">Status</button>
-                                                    </form>
-                                                    <form action="{{ route('super-admin.settings.wa-gateway.devices.session', [$device, 'restart']) }}" method="POST" class="mr-2 mb-1">
-                                                        @csrf
-                                                        <button type="submit" class="btn btn-warning btn-xs">Restart</button>
-                                                    </form>
+                                                    <button type="button" class="btn btn-outline-secondary btn-xs mr-2 mb-1" onclick="controlDeviceSession({{ $device->id }}, 'status', @js($device->device_name))">Status</button>
+                                                    <button type="button" class="btn btn-warning btn-xs mr-2 mb-1" onclick="controlDeviceSession({{ $device->id }}, 'restart', @js($device->device_name))">Restart</button>
+                                                    <button type="button" class="btn btn-success btn-xs mr-2 mb-1" onclick="openQrModal({{ $device->id }}, @js($device->device_name))">Scan QR</button>
                                                     @unless($device->is_default)
                                                         <form action="{{ route('super-admin.settings.wa-gateway.devices.default', $device) }}" method="POST" class="mr-2 mb-1">
                                                             @csrf
@@ -227,4 +214,299 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="wa-qr-modal" tabindex="-1" aria-labelledby="wa-qr-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="wa-qr-modal-label">Scan QR WhatsApp</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="small text-muted mb-2">Device: <strong id="wa-qr-device-name">-</strong></div>
+                    <div id="wa-qr-alert" class="mb-3"></div>
+                    <div id="wa-qr-canvas-wrap" class="text-center d-none">
+                        <div id="wa-qr-canvas" class="d-inline-block p-2 bg-white border rounded"></div>
+                    </div>
+                    <div id="wa-qr-countdown" class="small text-primary mt-2"></div>
+                    <div id="wa-qr-meta" class="small text-muted mt-2"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-warning btn-sm" onclick="refreshDeviceQrStatus('restart')">Generate QR Baru</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
+
+@push('scripts')
+    <script src="{{ asset('vendor/qrcodejs/qrcode.min.js') }}"></script>
+    <script>
+        const waSessionRoutes = {
+            service: @json(route('super-admin.settings.wa-gateway.service', '__ACTION__')),
+            deviceSession: @json(route('super-admin.settings.wa-gateway.devices.session', ['device' => '__DEVICE__', 'action' => '__ACTION__'])),
+        };
+
+        const waQrState = {
+            deviceId: null,
+            deviceName: '',
+            pollTimer: null,
+        };
+
+        function parseJsonResponse(response) {
+            return response.text().then(function (text) {
+                try {
+                    return JSON.parse(text);
+                } catch (error) {
+                    if (text.trim().startsWith('<')) {
+                        throw new Error('Endpoint mengembalikan HTML, bukan JSON.');
+                    }
+
+                    throw new Error('Respons JSON tidak valid.');
+                }
+            });
+        }
+
+        function setInlineAlert(targetId, message, type) {
+            const target = document.getElementById(targetId);
+
+            if (! target) {
+                return;
+            }
+
+            target.innerHTML = '<div class="alert alert-' + type + ' py-2 px-3 mb-0">' + message + '</div>';
+        }
+
+        function controlWaService(action) {
+            const route = waSessionRoutes.service.replace('__ACTION__', action);
+
+            setInlineAlert('wa-service-result', 'Memproses aksi service...', 'info');
+
+            fetch(route, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                },
+                body: JSON.stringify({}),
+            })
+                .then(parseJsonResponse)
+                .then(function (data) {
+                    if (! data.success) {
+                        throw new Error(data.message || 'Aksi service gagal.');
+                    }
+
+                    const serviceStatus = document.getElementById('wa-service-status');
+
+                    if (serviceStatus && data.data && data.data.pm2_status) {
+                        serviceStatus.textContent = data.data.pm2_status;
+                    }
+
+                    setInlineAlert('wa-service-result', data.message || 'Aksi service berhasil.', 'success');
+                })
+                .catch(function (error) {
+                    setInlineAlert('wa-service-result', error.message, 'danger');
+                });
+        }
+
+        function controlDeviceSession(deviceId, action, deviceName) {
+            const route = waSessionRoutes.deviceSession
+                .replace('__DEVICE__', String(deviceId))
+                .replace('__ACTION__', action);
+
+            setInlineAlert('wa-service-result', 'Memproses sesi untuk ' + deviceName + '...', 'info');
+
+            fetch(route, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                },
+                body: JSON.stringify({}),
+            })
+                .then(parseJsonResponse)
+                .then(function (data) {
+                    if (! data.success) {
+                        throw new Error(data.message || 'Aksi sesi device gagal.');
+                    }
+
+                    const statusCell = document.getElementById('device-status-' + deviceId);
+
+                    if (statusCell && data.data && data.data.status) {
+                        statusCell.textContent = data.data.status;
+                    } else if (statusCell && action === 'restart') {
+                        statusCell.textContent = 'restarting';
+                    }
+
+                    setInlineAlert('wa-service-result', data.message || 'Aksi sesi berhasil.', 'success');
+                })
+                .catch(function (error) {
+                    setInlineAlert('wa-service-result', error.message, 'danger');
+                });
+        }
+
+        function showQrAlert(message, type) {
+            setInlineAlert('wa-qr-alert', message, type);
+        }
+
+        function clearQrCanvas() {
+            const wrap = document.getElementById('wa-qr-canvas-wrap');
+            const canvas = document.getElementById('wa-qr-canvas');
+            const meta = document.getElementById('wa-qr-meta');
+            const countdown = document.getElementById('wa-qr-countdown');
+
+            if (wrap) {
+                wrap.classList.add('d-none');
+            }
+
+            if (canvas) {
+                canvas.innerHTML = '';
+            }
+
+            if (meta) {
+                meta.textContent = '';
+            }
+
+            if (countdown) {
+                countdown.textContent = '';
+            }
+        }
+
+        function stopQrPolling() {
+            if (waQrState.pollTimer) {
+                clearInterval(waQrState.pollTimer);
+                waQrState.pollTimer = null;
+            }
+        }
+
+        function renderQrCode(qrText) {
+            const wrap = document.getElementById('wa-qr-canvas-wrap');
+            const canvas = document.getElementById('wa-qr-canvas');
+
+            if (! wrap || ! canvas) {
+                return;
+            }
+
+            canvas.innerHTML = '';
+            wrap.classList.remove('d-none');
+
+            if (window.QRCode) {
+                new QRCode(canvas, {
+                    text: qrText,
+                    width: 260,
+                    height: 260,
+                });
+            }
+        }
+
+        function refreshDeviceQrStatus(action = 'status') {
+            if (! waQrState.deviceId) {
+                return;
+            }
+
+            const route = waSessionRoutes.deviceSession
+                .replace('__DEVICE__', String(waQrState.deviceId))
+                .replace('__ACTION__', action);
+
+            showQrAlert(action === 'restart' ? 'Meminta QR baru...' : 'Mengecek status sesi...', 'info');
+
+            fetch(route, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                },
+                body: JSON.stringify({}),
+            })
+                .then(parseJsonResponse)
+                .then(function (data) {
+                    if (! data.success) {
+                        throw new Error(data.message || 'Gagal membaca status QR device.');
+                    }
+
+                    const payload = data.data || {};
+                    const status = String(payload.status || '').toLowerCase();
+                    const qr = payload.qr || null;
+                    const meta = document.getElementById('wa-qr-meta');
+                    const statusCell = document.getElementById('device-status-' + waQrState.deviceId);
+
+                    if (statusCell && status !== '') {
+                        statusCell.textContent = status;
+                    }
+
+                    if (meta) {
+                        meta.textContent = status !== '' ? 'Status: ' + status : 'Status: -';
+                    }
+
+                    if (status === 'connected') {
+                        showQrAlert('Device sudah terhubung.', 'success');
+                        stopQrPolling();
+
+                        return;
+                    }
+
+                    if (qr) {
+                        renderQrCode(String(qr));
+                        showQrAlert('QR siap dipindai. Buka WhatsApp > Perangkat tertaut > Tautkan perangkat.', 'success');
+
+                        return;
+                    }
+
+                    if (action === 'restart') {
+                        showQrAlert('Sesi direstart. Menunggu QR baru muncul...', 'warning');
+
+                        return;
+                    }
+
+                    showQrAlert('QR belum tersedia. Coba restart sesi atau generate QR baru.', 'warning');
+                })
+                .catch(function (error) {
+                    showQrAlert(error.message, 'danger');
+                });
+        }
+
+        function openQrModal(deviceId, deviceName) {
+            waQrState.deviceId = Number(deviceId);
+            waQrState.deviceName = String(deviceName || 'Device');
+
+            const deviceNameEl = document.getElementById('wa-qr-device-name');
+
+            if (deviceNameEl) {
+                deviceNameEl.textContent = waQrState.deviceName;
+            }
+
+            clearQrCanvas();
+            showQrAlert('Memuat status sesi dan QR...', 'info');
+
+            if (window.jQuery) {
+                window.jQuery('#wa-qr-modal').modal('show');
+            }
+
+            refreshDeviceQrStatus('status');
+            stopQrPolling();
+
+            waQrState.pollTimer = setInterval(function () {
+                refreshDeviceQrStatus('status');
+            }, 4000);
+        }
+
+        if (window.jQuery) {
+            window.jQuery('#wa-qr-modal').on('hidden.bs.modal', function () {
+                stopQrPolling();
+                waQrState.deviceId = null;
+                waQrState.deviceName = '';
+                clearQrCanvas();
+                document.getElementById('wa-qr-alert').innerHTML = '';
+            });
+        }
+    </script>
+@endpush

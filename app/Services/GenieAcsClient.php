@@ -206,6 +206,42 @@ class GenieAcsClient
     }
 
     /**
+     * @return array{success: bool, queued: bool, status: int, message: string}
+     */
+    public function setWifi(string $deviceId, string $ssid, ?string $password = null, string $profile = 'igd'): array
+    {
+        $params = config("genieacs.params.{$profile}");
+        $parameterValues = [
+            [$params['wifi_ssid'], $ssid, 'xsd:string'],
+        ];
+
+        if (is_string($password) && $password !== '') {
+            $parameterValues[] = [$params['wifi_password'], $password, 'xsd:string'];
+        }
+
+        return $this->createTask($deviceId, [
+            'name' => 'setParameterValues',
+            'parameterValues' => $parameterValues,
+        ]);
+    }
+
+    /**
+     * @return array{success: bool, queued: bool, status: int, message: string}
+     */
+    public function setPppoeCredentials(string $deviceId, string $username, string $password, string $profile = 'igd'): array
+    {
+        $params = config("genieacs.params.{$profile}");
+
+        return $this->createTask($deviceId, [
+            'name' => 'setParameterValues',
+            'parameterValues' => [
+                [$params['pppoe_username'], $username, 'xsd:string'],
+                [$params['pppoe_password'], $password, 'xsd:string'],
+            ],
+        ]);
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     public function findDeviceByUsername(string $username): ?array
@@ -466,6 +502,18 @@ class GenieAcsClient
         ];
     }
 
+    /**
+     * @param  list<string>  $parameterNames
+     * @return array{success: bool, queued: bool, status: int, message: string}
+     */
+    public function refreshParameters(string $deviceId, array $parameterNames): array
+    {
+        return $this->createTask($deviceId, [
+            'name' => 'getParameterValues',
+            'parameterNames' => $parameterNames,
+        ]);
+    }
+
     private function request(): PendingRequest
     {
         $request = Http::baseUrl($this->baseUrl)
@@ -491,22 +539,47 @@ class GenieAcsClient
 
     private function extractValue(array $payload, string $path): mixed
     {
-        $segments = explode('.', $path);
-        $current = $payload;
+        return $this->extractValueFromSegments($payload, explode('.', $path));
+    }
 
-        foreach ($segments as $segment) {
-            if (! is_array($current) || ! array_key_exists($segment, $current)) {
-                return null;
+    /**
+     * @param  list<string>  $segments
+     */
+    private function extractValueFromSegments(array $payload, array $segments): mixed
+    {
+        if ($segments === []) {
+            if (array_key_exists('_value', $payload)) {
+                return $payload['_value'];
             }
 
-            $current = $current[$segment];
+            return $payload;
         }
 
-        if (is_array($current) && array_key_exists('_value', $current)) {
-            return $current['_value'];
+        $segment = array_shift($segments);
+
+        if (is_string($segment) && array_key_exists($segment, $payload)) {
+            $next = $payload[$segment];
+
+            if (! is_array($next)) {
+                return $segments === [] ? $next : null;
+            }
+
+            return $this->extractValueFromSegments($next, $segments);
         }
 
-        return $current;
+        foreach ($payload as $key => $value) {
+            if (! is_numeric((string) $key) || ! is_array($value)) {
+                continue;
+            }
+
+            $candidate = $this->extractValueFromSegments($value, $segments);
+
+            if ($candidate !== null) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     private function normalizeMacAddress(mixed $value): ?string

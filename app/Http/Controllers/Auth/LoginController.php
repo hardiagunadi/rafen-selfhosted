@@ -33,8 +33,15 @@ class LoginController extends Controller
         }
 
         $request->session()->regenerate();
+        $request->user()?->forceFill(['last_login_at' => now()])->save();
 
-        return redirect()->intended(route('super-admin.settings.license'));
+        $user = $request->user();
+
+        if ($user?->isSuperAdmin()) {
+            return redirect()->intended(route('super-admin.dashboard'));
+        }
+
+        return redirect()->intended(route('shifts.my'));
     }
 
     public function logout(Request $request): RedirectResponse

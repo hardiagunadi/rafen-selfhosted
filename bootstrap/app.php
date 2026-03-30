@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureSystemFeatureEnabled;
 use App\Http\Middleware\EnsureValidSystemLicense;
+use App\Http\Middleware\PortalAuthenticate;
 use App\Http\Middleware\SuperAdminMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -15,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'portal.auth' => PortalAuthenticate::class,
             'super.admin' => SuperAdminMiddleware::class,
             'system.license' => EnsureValidSystemLicense::class,
             'system.feature' => EnsureSystemFeatureEnabled::class,

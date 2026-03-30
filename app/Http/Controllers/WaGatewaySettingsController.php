@@ -9,7 +9,9 @@ use App\Models\WaGatewaySetting;
 use App\Models\WaMultiSessionDevice;
 use App\Services\WaGatewayService;
 use App\Services\WaMultiSessionManager;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -41,12 +43,16 @@ class WaGatewaySettingsController extends Controller
             ->with('success', 'Pengaturan WhatsApp Gateway berhasil diperbarui.');
     }
 
-    public function serviceControl(string $action, WaMultiSessionManager $manager): RedirectResponse
+    public function serviceControl(Request $request, string $action, WaMultiSessionManager $manager): JsonResponse|RedirectResponse
     {
         if (! in_array($action, ['status', 'restart', 'ensure-running'], true)) {
-            return redirect()
-                ->route('super-admin.settings.wa-gateway.index')
-                ->with('error', 'Aksi service WhatsApp tidak valid.');
+            return $this->respondActionResult(
+                $request,
+                false,
+                'Aksi service WhatsApp tidak valid.',
+                null,
+                422
+            );
         }
 
         $result = match ($action) {
@@ -59,9 +65,13 @@ class WaGatewaySettingsController extends Controller
             'ensure-running' => $manager->ensureRunning(),
         };
 
-        return redirect()
-            ->route('super-admin.settings.wa-gateway.index')
-            ->with(($result['success'] ?? false) ? 'success' : 'error', (string) ($result['message'] ?? 'Permintaan selesai.'));
+        return $this->respondActionResult(
+            $request,
+            (bool) ($result['success'] ?? false),
+            (string) ($result['message'] ?? 'Permintaan selesai.'),
+            $result['data'] ?? null,
+            (bool) ($result['success'] ?? false) ? 200 : 422
+        );
     }
 
     public function storeDevice(StoreWaMultiSessionDeviceRequest $request): RedirectResponse
@@ -107,37 +117,53 @@ class WaGatewaySettingsController extends Controller
             ->with('success', 'Device default berhasil diperbarui.');
     }
 
-    public function testConnection(): RedirectResponse
+    public function testConnection(Request $request): JsonResponse|RedirectResponse
     {
         $service = WaGatewayService::fromSettings();
 
         if (! $service?->isConfigured()) {
-            return redirect()
-                ->route('super-admin.settings.wa-gateway.index')
-                ->with('error', 'Gateway WhatsApp belum dikonfigurasi lengkap.');
+            return $this->respondActionResult(
+                $request,
+                false,
+                'Gateway WhatsApp belum dikonfigurasi lengkap.',
+                null,
+                422
+            );
         }
 
         $result = $service->testConnection();
 
-        return redirect()
-            ->route('super-admin.settings.wa-gateway.index')
-            ->with(($result['status'] ?? false) ? 'success' : 'error', (string) ($result['message'] ?? 'Tes koneksi selesai.'));
+        return $this->respondActionResult(
+            $request,
+            (bool) ($result['status'] ?? false),
+            (string) ($result['message'] ?? 'Tes koneksi selesai.'),
+            $result['data'] ?? null,
+            (bool) ($result['status'] ?? false) ? 200 : 422
+        );
     }
 
-    public function sessionControl(WaMultiSessionDevice $device, string $action): RedirectResponse
+    public function sessionControl(Request $request, WaMultiSessionDevice $device, string $action): JsonResponse|RedirectResponse
     {
         if (! in_array($action, ['status', 'restart'], true)) {
-            return redirect()
-                ->route('super-admin.settings.wa-gateway.index')
-                ->with('error', 'Aksi sesi WhatsApp tidak valid.');
+            return $this->respondActionResult(
+                $request,
+                false,
+                'Aksi sesi WhatsApp tidak valid.',
+                null,
+                422
+            );
         }
 
         $service = WaGatewayService::fromSettings();
 
         if (! $service?->isConfigured()) {
-            return redirect()
-                ->route('super-admin.settings.wa-gateway.index')
-                ->with('error', 'Gateway WhatsApp belum dikonfigurasi lengkap.');
+            return $this->respondActionResult(
+                $request,
+                false,
+                'Gateway WhatsApp belum dikonfigurasi lengkap.',
+                null,
+                422
+            );
         }
 
         $service->setSessionId($device->session_id);
@@ -147,16 +173,24 @@ class WaGatewaySettingsController extends Controller
             'restart' => $service->restartSession(),
         };
 
-        $rawStatusValue = data_get($result, 'data.status');
+        $sessionData = is_array($result['data'] ?? null)
+            ? $this->normalizeSessionData($result['data'])
+            : ($result['data'] ?? null);
+
+        $rawStatusValue = is_array($sessionData) ? ($sessionData['status'] ?? null) : null;
         $statusValue = is_string($rawStatusValue) ? trim($rawStatusValue) : '';
         $device->update([
             'last_status' => $statusValue !== '' ? $statusValue : $device->last_status,
             'last_seen_at' => ($result['status'] ?? false) ? now() : $device->last_seen_at,
         ]);
 
-        return redirect()
-            ->route('super-admin.settings.wa-gateway.index')
-            ->with(($result['status'] ?? false) ? 'success' : 'error', (string) ($result['message'] ?? 'Permintaan sesi selesai.'));
+        return $this->respondActionResult(
+            $request,
+            (bool) ($result['status'] ?? false),
+            (string) ($result['message'] ?? 'Permintaan sesi selesai.'),
+            $sessionData,
+            (bool) ($result['status'] ?? false) ? 200 : 422
+        );
     }
 
     public function sendTestMessage(SendWaGatewayTestMessageRequest $request): RedirectResponse
@@ -226,5 +260,54 @@ class WaGatewaySettingsController extends Controller
         return redirect()
             ->route('super-admin.settings.wa-gateway.index')
             ->with('success', 'Device WhatsApp berhasil dihapus.');
+    }
+
+    private function respondActionResult(
+        Request $request,
+        bool $success,
+        string $message,
+        mixed $data = null,
+        int $statusCode = 200
+    ): JsonResponse|RedirectResponse {
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => $success,
+                'message' => $message,
+                'data' => $data,
+            ], $statusCode);
+        }
+
+        return redirect()
+            ->route('super-admin.settings.wa-gateway.index')
+            ->with($success ? 'success' : 'error', $message);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeSessionData(array $data): array
+    {
+        $payload = isset($data['data']) && is_array($data['data'])
+            ? $data['data']
+            : $data;
+
+        $status = $payload['status'] ?? $payload['state'] ?? (is_string($data['status'] ?? null) ? $data['status'] : null);
+        $qr = $payload['qr'] ?? $payload['qrCode'] ?? $payload['qr_code'] ?? $data['qr'] ?? $data['qrCode'] ?? $data['qr_code'] ?? null;
+        $updatedAt = $payload['updated_at'] ?? $payload['updatedAt'] ?? $data['updated_at'] ?? $data['updatedAt'] ?? null;
+
+        if ($status !== null) {
+            $payload['status'] = $status;
+        }
+
+        if ($qr !== null) {
+            $payload['qr'] = $qr;
+        }
+
+        if ($updatedAt !== null) {
+            $payload['updated_at'] = $updatedAt;
+        }
+
+        return $payload;
     }
 }

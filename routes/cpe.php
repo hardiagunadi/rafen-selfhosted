@@ -11,6 +11,9 @@ Route::middleware(['auth', 'system.license', 'system.feature:genieacs', SuperAdm
         Route::get('/', [CpeController::class, 'index'])->name('index');
         Route::post('/sync', [CpeController::class, 'sync'])->name('sync');
         Route::post('/link', [CpeController::class, 'link'])->name('link');
+        Route::post('/{cpeDevice}/refresh', [CpeController::class, 'refresh'])->name('refresh');
+        Route::post('/{cpeDevice}/wifi', [CpeController::class, 'updateWifi'])->name('update-wifi');
+        Route::post('/{cpeDevice}/pppoe', [CpeController::class, 'updatePppoe'])->name('update-pppoe');
         Route::post('/{cpeDevice}/reboot', [CpeController::class, 'reboot'])->name('reboot');
         Route::delete('/{cpeDevice}', [CpeController::class, 'destroy'])->name('destroy');
     });

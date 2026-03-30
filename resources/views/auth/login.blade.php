@@ -1,21 +1,22 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
+    @php($systemSettings = \App\Models\SystemSetting::instance())
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Login - Rafen Self-Hosted</title>
+    <title>Login - {{ $systemSettings->appName('Rafen Self-Hosted') }}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
 </head>
 <body class="hold-transition login-page">
     <div class="login-box">
         <div class="login-logo">
-            <strong>Rafen</strong> Self-Hosted
+            <strong>{{ $systemSettings->appName('Rafen') }}</strong>
         </div>
         <div class="card">
             <div class="card-body login-card-body">
-                <p class="login-box-msg">Masuk ke Rafen Self-Hosted</p>
+                <p class="login-box-msg">Masuk ke {{ $systemSettings->appName('Rafen Self-Hosted') }}</p>
 
                 @if ($errors->any())
                     <div class="alert alert-danger">{{ $errors->first() }}</div>

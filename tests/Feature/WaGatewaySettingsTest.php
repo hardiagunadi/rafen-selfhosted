@@ -189,3 +189,51 @@ it('refreshes whatsapp session status for a device', function () {
 
     expect($device->fresh()->last_seen_at)->not->toBeNull();
 });
+
+it('returns json responses for ajax session checks', function () {
+    $user = User::factory()->superAdmin()->create();
+    WaGatewaySetting::factory()->create([
+        'id' => 1,
+        'auth_token' => 'device-token',
+        'gateway_url' => 'http://127.0.0.1:3100',
+    ]);
+    $device = WaMultiSessionDevice::factory()->create([
+        'session_id' => 'device-qr-status',
+        'last_status' => null,
+    ]);
+
+    $response = $this->actingAs($user)
+        ->postJson(route('super-admin.settings.wa-gateway.devices.session', [$device, 'status']));
+
+    $response->assertSuccessful()
+        ->assertJsonPath('success', true)
+        ->assertHeader('content-type', 'application/json')
+        ->assertJsonStructure([
+            'success',
+            'message',
+            'data' => [
+                'status',
+            ],
+        ]);
+
+    Http::assertSent(fn ($request): bool => str_starts_with($request->url(), 'http://127.0.0.1:3100/api/v2/sessions/status'));
+});
+
+it('returns json validation style errors for invalid ajax session actions', function () {
+    $user = User::factory()->superAdmin()->create();
+    WaGatewaySetting::factory()->create([
+        'id' => 1,
+        'auth_token' => 'device-token',
+        'gateway_url' => 'http://127.0.0.1:3100',
+    ]);
+    $device = WaMultiSessionDevice::factory()->create([
+        'session_id' => 'device-html-status',
+        'last_status' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->postJson(route('super-admin.settings.wa-gateway.devices.session', [$device, 'invalid']))
+        ->assertUnprocessable()
+        ->assertHeader('content-type', 'application/json')
+        ->assertJsonPath('success', false);
+});

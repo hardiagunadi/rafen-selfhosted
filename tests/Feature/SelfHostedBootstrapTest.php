@@ -12,7 +12,7 @@ it('shows the login page', function () {
         ->assertSee('Masuk ke Rafen Self-Hosted');
 });
 
-it('allows a super admin to sign in and open the license page', function () {
+it('allows a super admin to sign in and open the dashboard', function () {
     $user = User::factory()->superAdmin()->create([
         'password' => Hash::make('secret-123'),
     ]);
@@ -20,10 +20,10 @@ it('allows a super admin to sign in and open the license page', function () {
     $this->post(route('login.attempt'), [
         'email' => $user->email,
         'password' => 'secret-123',
-    ])->assertRedirect(route('super-admin.settings.license'));
+    ])->assertRedirect(route('super-admin.dashboard'));
 
     $this->actingAs($user)
-        ->get(route('super-admin.settings.license'))
+        ->get(route('super-admin.dashboard'))
         ->assertSuccessful();
 });
 

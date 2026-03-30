@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\WaGatewaySetting;
 use App\Models\WaMultiSessionDevice;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 class WaGatewayService
@@ -85,11 +86,22 @@ class WaGatewayService
                     ->get($this->url.$path);
 
                 if ($response->successful()) {
+                    $payload = $this->decodeJsonResponse($response);
+
+                    if ($payload === null) {
+                        return [
+                            'status' => false,
+                            'message' => 'Gateway merespons non-JSON pada endpoint '.$path.'.',
+                            'http_status' => $response->status(),
+                            'data' => $response->body(),
+                        ];
+                    }
+
                     return [
                         'status' => true,
                         'message' => 'Koneksi berhasil (endpoint: '.$path.')',
                         'http_status' => $response->status(),
-                        'data' => $response->json(),
+                        'data' => $payload,
                     ];
                 }
 
@@ -192,12 +204,21 @@ class WaGatewayService
                 ]);
 
             if ($response->successful()) {
-                $body = $response->json();
+                $body = $this->decodeJsonResponse($response);
+
+                if ($body === null) {
+                    return [
+                        'status' => false,
+                        'message' => 'Gateway sesi mengembalikan respons non-JSON.',
+                        'data' => $response->body(),
+                        'http_status' => $response->status(),
+                    ];
+                }
 
                 return [
                     'status' => true,
                     'message' => 'Status sesi berhasil diambil.',
-                    'data' => $body['data'] ?? $body,
+                    'data' => $this->normalizeSessionPayload($body),
                     'http_status' => $response->status(),
                 ];
             }
@@ -233,12 +254,21 @@ class WaGatewayService
                 ]);
 
             if ($response->successful()) {
-                $body = $response->json();
+                $body = $this->decodeJsonResponse($response);
+
+                if ($body === null) {
+                    return [
+                        'status' => false,
+                        'message' => 'Gateway sesi mengembalikan respons non-JSON.',
+                        'data' => $response->body(),
+                        'http_status' => $response->status(),
+                    ];
+                }
 
                 return [
                     'status' => true,
                     'message' => (string) ($body['message'] ?? 'Berhasil.'),
-                    'data' => $body['data'] ?? $body,
+                    'data' => $this->normalizeSessionPayload($body),
                     'http_status' => $response->status(),
                 ];
             }
@@ -294,5 +324,46 @@ class WaGatewayService
             ->first();
 
         return trim((string) $defaultDevice?->session_id);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function decodeJsonResponse(Response $response): ?array
+    {
+        $decoded = $response->json();
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function normalizeSessionPayload(array $payload): array
+    {
+        $data = $payload;
+
+        if (isset($payload['data']) && is_array($payload['data'])) {
+            $data = $payload['data'];
+        }
+
+        $status = $data['status'] ?? $data['state'] ?? $payload['status'] ?? null;
+        $qr = $data['qr'] ?? $data['qrCode'] ?? $data['qr_code'] ?? $payload['qr'] ?? $payload['qrCode'] ?? $payload['qr_code'] ?? null;
+        $updatedAt = $data['updated_at'] ?? $data['updatedAt'] ?? $payload['updated_at'] ?? $payload['updatedAt'] ?? null;
+
+        if ($status !== null) {
+            $data['status'] = $status;
+        }
+
+        if ($qr !== null) {
+            $data['qr'] = $qr;
+        }
+
+        if ($updatedAt !== null) {
+            $data['updated_at'] = $updatedAt;
+        }
+
+        return $data;
     }
 }

@@ -162,5 +162,156 @@
                 </div>
             </div>
         </div>
+
+        @if($linkedDevices->isNotEmpty())
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title mb-0">Operasi CPE</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                @foreach($linkedDevices as $device)
+                                    @php
+                                        $firstWifi = $device->cached_params['wifi_networks'][0] ?? [];
+                                        $wanConnections = $device->cached_params['wan_connections'] ?? [];
+                                        $isWifiTarget = (string) old('wifi_device_id') === (string) $device->id;
+                                        $isPppoeTarget = (string) old('pppoe_device_id') === (string) $device->id;
+                                    @endphp
+                                    <div class="col-xl-6 d-flex">
+                                        <div class="card card-outline card-secondary flex-fill">
+                                            <div class="card-header d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <div class="font-weight-bold">{{ $device->radiusAccount?->username ?? $device->genieacs_device_id }}</div>
+                                                    <div class="small text-muted">{{ $device->manufacturer ?: '-' }} {{ $device->model ?: '' }}</div>
+                                                </div>
+                                                <form action="{{ route('super-admin.settings.cpe.refresh', $device) }}" method="POST" class="mb-0">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-outline-primary btn-sm">Refresh</button>
+                                                </form>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <h6 class="font-weight-bold">Update PPPoE</h6>
+                                                        <form action="{{ route('super-admin.settings.cpe.update-pppoe', $device) }}" method="POST">
+                                                            @csrf
+                                                            <input type="hidden" name="pppoe_device_id" value="{{ $device->id }}">
+                                                            <div class="form-group">
+                                                                <label>Username</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="username"
+                                                                    class="form-control form-control-sm {{ $isPppoeTarget && $errors->has('username') ? 'is-invalid' : '' }}"
+                                                                    value="{{ $isPppoeTarget ? old('username') : ($device->radiusAccount?->username ?? ($device->cached_params['pppoe_username'] ?? '')) }}"
+                                                                >
+                                                                @if($isPppoeTarget)
+                                                                    @error('username')
+                                                                        <div class="invalid-feedback">{{ $message }}</div>
+                                                                    @enderror
+                                                                @endif
+                                                            </div>
+                                                            <div class="form-group">
+                                                                <label>Password</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="password"
+                                                                    class="form-control form-control-sm {{ $isPppoeTarget && $errors->has('password') ? 'is-invalid' : '' }}"
+                                                                    value="{{ $isPppoeTarget ? old('password') : ($device->radiusAccount?->password ?? '') }}"
+                                                                >
+                                                                @if($isPppoeTarget)
+                                                                    @error('password')
+                                                                        <div class="invalid-feedback">{{ $message }}</div>
+                                                                    @enderror
+                                                                @endif
+                                                            </div>
+                                                            <button type="submit" class="btn btn-outline-success btn-sm" @disabled(! $device->radiusAccount)>
+                                                                Update PPPoE
+                                                            </button>
+                                                            @if(! $device->radiusAccount)
+                                                                <div class="small text-muted mt-2">Hubungkan device ke akun Radius terlebih dahulu.</div>
+                                                            @endif
+                                                        </form>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <h6 class="font-weight-bold">Update WiFi</h6>
+                                                        <form action="{{ route('super-admin.settings.cpe.update-wifi', $device) }}" method="POST">
+                                                            @csrf
+                                                            <input type="hidden" name="wifi_device_id" value="{{ $device->id }}">
+                                                            <div class="form-group">
+                                                                <label>SSID</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="ssid"
+                                                                    class="form-control form-control-sm {{ $isWifiTarget && $errors->has('ssid') ? 'is-invalid' : '' }}"
+                                                                    value="{{ $isWifiTarget ? old('ssid') : ($firstWifi['ssid'] ?? '') }}"
+                                                                >
+                                                                @if($isWifiTarget)
+                                                                    @error('ssid')
+                                                                        <div class="invalid-feedback">{{ $message }}</div>
+                                                                    @enderror
+                                                                @endif
+                                                            </div>
+                                                            <div class="form-group">
+                                                                <label>Password</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="password"
+                                                                    class="form-control form-control-sm {{ $isWifiTarget && $errors->has('password') ? 'is-invalid' : '' }}"
+                                                                    value="{{ $isWifiTarget ? old('password') : '' }}"
+                                                                    placeholder="Kosongkan jika password tidak diubah"
+                                                                >
+                                                                @if($isWifiTarget)
+                                                                    @error('password')
+                                                                        <div class="invalid-feedback">{{ $message }}</div>
+                                                                    @enderror
+                                                                @endif
+                                                                <small class="text-muted">Isi hanya jika password WiFi juga ingin diubah.</small>
+                                                            </div>
+                                                            <button type="submit" class="btn btn-outline-info btn-sm">Update WiFi</button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mt-3">
+                                                    <h6 class="font-weight-bold">WAN Info</h6>
+                                                    @if($wanConnections !== [])
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm mb-0">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Nama</th>
+                                                                        <th>Username</th>
+                                                                        <th>Status</th>
+                                                                        <th>MAC</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    @foreach($wanConnections as $wanConnection)
+                                                                        <tr>
+                                                                            <td>{{ $wanConnection['name'] ?? ($wanConnection['type'] ?? '-') }}</td>
+                                                                            <td>{{ $wanConnection['username'] ?? '-' }}</td>
+                                                                            <td>{{ $wanConnection['status'] ?? '-' }}</td>
+                                                                            <td>{{ $wanConnection['mac_address'] ?? '-' }}</td>
+                                                                        </tr>
+                                                                    @endforeach
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    @else
+                                                        <div class="text-muted small">Belum ada data WAN di cache device.</div>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
     </div>
 @endsection
