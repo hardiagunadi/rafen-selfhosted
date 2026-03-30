@@ -74,6 +74,11 @@ Activation request self-hosted sekarang menyertakan konteks berikut agar vendor 
 - fingerprint server
 - rekomendasi mode akses awal
 
+Di halaman lisensi self-hosted tersedia helper operasional:
+- `Copy Activation Summary` untuk kirim ringkasan cepat ke vendor
+- preview `Activation Request JSON`
+- `Copy Activation Request JSON` untuk copy payload penuh tanpa harus unduh file dulu
+
 ## Requirement Runtime
 
 - PHP CLI dan PHP-FPM diprioritaskan ke `8.4.x`

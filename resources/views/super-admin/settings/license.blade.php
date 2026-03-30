@@ -5,6 +5,14 @@
 @section('content')
 @php
     $license = $snapshot['license'];
+    $appUrl = (string) config('app.url');
+    $appUrlHost = (string) parse_url($appUrl, PHP_URL_HOST);
+    $serverName = php_uname('n');
+    $activationAccessMode = match (true) {
+        $appUrlHost === '', in_array($appUrlHost, ['localhost', '127.0.0.1'], true) => 'fingerprint_only',
+        filter_var($appUrlHost, FILTER_VALIDATE_IP) !== false => 'ip_based',
+        default => 'domain_based',
+    };
     $statusClass = match ($license->status) {
         'active' => 'success',
         'grace' => 'warning',
@@ -22,6 +30,36 @@
             default => ucwords(str_replace('_', ' ', $value)),
         };
     };
+
+    $activationRequestPayload = app(\App\Services\LicenseActivationRequestService::class)->makePayload();
+    $activationRequestJson = json_encode($activationRequestPayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    $operatorChecklist = [
+        [
+            'title' => 'Pastikan server sudah terpasang dan APP_URL sudah sesuai',
+            'description' => 'Boleh tetap IP-based. Domain final tidak wajib ada di tahap awal.',
+            'done' => $appUrl !== '',
+        ],
+        [
+            'title' => 'Unduh atau copy activation request',
+            'description' => 'Kirim activation request atau activation summary ke vendor/SaaS issuer.',
+            'done' => true,
+        ],
+        [
+            'title' => 'Minta issue lisensi dengan mode akses yang sesuai',
+            'description' => 'Gunakan Fingerprint Only atau IP-Based bila domain final belum siap.',
+            'done' => filled($license->license_id),
+        ],
+        [
+            'title' => 'Upload file lisensi ke instance self-hosted ini',
+            'description' => 'Format yang didukung: .json, .txt, atau .lic.',
+            'done' => $snapshot['file_exists'],
+        ],
+        [
+            'title' => 'Verifikasi lisensi sudah aktif',
+            'description' => 'Pastikan status lisensi berubah menjadi Aktif atau Grace Period.',
+            'done' => $snapshot['is_valid'],
+        ],
+    ];
 @endphp
 <div class="container-fluid">
     <div class="row mb-3 align-items-center">
@@ -106,19 +144,83 @@
             </div>
 
             <div class="card mt-3">
+                <div class="card-header"><i class="fas fa-tasks mr-1"></i> Operator Checklist</div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Gunakan checklist ini saat provisioning self-hosted baru atau saat aktivasi ulang lisensi.</p>
+                    <div class="list-group list-group-flush">
+                        @foreach($operatorChecklist as $index => $item)
+                            <div class="list-group-item px-0">
+                                <div class="d-flex align-items-start">
+                                    <div class="mr-3 mt-1">
+                                        @if($item['done'])
+                                            <span class="badge badge-success px-2 py-2"><i class="fas fa-check"></i></span>
+                                        @else
+                                            <span class="badge badge-secondary px-2 py-2">{{ $index + 1 }}</span>
+                                        @endif
+                                    </div>
+                                    <div>
+                                        <div class="font-weight-bold">{{ $item['title'] }}</div>
+                                        <div class="text-muted small">{{ $item['description'] }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
                 <div class="card-header"><i class="fas fa-fingerprint mr-1"></i> Fingerprint Server</div>
                 <div class="card-body">
                     <p class="text-muted mb-2">Kirim activation request atau fingerprint ini ke vendor untuk penerbitan lisensi. Flow ini mendukung instalasi IP-based tanpa domain final.</p>
                     <div class="small text-muted mb-3">
-                        <div>APP_URL saat ini: <code>{{ config('app.url') }}</code></div>
-                        <div>Host APP_URL: <code>{{ parse_url((string) config('app.url'), PHP_URL_HOST) ?: '-' }}</code></div>
-                        <div>Server name: <code>{{ php_uname('n') }}</code></div>
+                        <div>APP_URL saat ini: <code>{{ $appUrl }}</code></div>
+                        <div>Host APP_URL: <code>{{ $appUrlHost ?: '-' }}</code></div>
+                        <div>Server name: <code>{{ $serverName }}</code></div>
                     </div>
                     <textarea class="form-control" rows="3" readonly>{{ $snapshot['expected_fingerprint'] }}</textarea>
-                    <a href="{{ route('super-admin.settings.license.activation-request') }}" class="btn btn-outline-primary mt-3">
-                        <i class="fas fa-download mr-1"></i> Unduh Activation Request
-                    </a>
+                    @php
+                        $activationSummary = implode(PHP_EOL, [
+                            'RAFEN Self-Hosted Activation Request',
+                            'APP_URL: '.$appUrl,
+                            'APP_URL Host: '.($appUrlHost ?: '-'),
+                            'Server Name: '.$serverName,
+                            'Access Mode: '.$formatAccessMode($activationAccessMode),
+                            'Fingerprint: '.$snapshot['expected_fingerprint'],
+                        ]);
+                    @endphp
+                    <div class="mt-3 d-flex flex-wrap" style="gap:.75rem;">
+                        <a href="{{ route('super-admin.settings.license.activation-request') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-download mr-1"></i> Unduh Activation Request
+                        </a>
+                        <button
+                            type="button"
+                            class="btn btn-outline-secondary"
+                            id="copyActivationSummaryBtn"
+                            data-copy-text="{{ $activationSummary }}"
+                        >
+                            <i class="fas fa-copy mr-1"></i> Copy Activation Summary
+                        </button>
+                    </div>
                     <small class="form-text text-muted">Jika domain belum siap, biarkan vendor issue lisensi dengan mode fingerprint-only atau IP-based terlebih dahulu. Domain bisa dicatat kemudian saat deployment sudah stabil.</small>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header"><i class="fas fa-code mr-1"></i> Preview Activation Request</div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">Preview ini sama dengan payload yang akan diunduh vendor dari tombol activation request.</p>
+                    <textarea class="form-control" rows="12" readonly id="activationRequestPreview">{{ $activationRequestJson }}</textarea>
+                    <div class="mt-3">
+                        <button
+                            type="button"
+                            class="btn btn-outline-secondary"
+                            id="copyActivationRequestJsonBtn"
+                            data-copy-text="{{ $activationRequestJson }}"
+                        >
+                            <i class="fas fa-copy mr-1"></i> Copy Activation Request JSON
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -222,6 +324,76 @@ document.getElementById('licenseFileInput')?.addEventListener('change', function
     if (label) {
         label.textContent = fileName;
     }
+});
+
+document.getElementById('copyActivationSummaryBtn')?.addEventListener('click', async function () {
+    const originalHtml = this.innerHTML;
+    const copyText = this.dataset.copyText || '';
+
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(copyText);
+        } else {
+            const tempInput = document.createElement('textarea');
+            tempInput.value = copyText;
+            tempInput.setAttribute('readonly', 'readonly');
+            tempInput.style.position = 'absolute';
+            tempInput.style.left = '-9999px';
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+        }
+
+        this.innerHTML = '<i class="fas fa-check mr-1"></i> Tersalin';
+        this.classList.remove('btn-outline-secondary');
+        this.classList.add('btn-success');
+    } catch (error) {
+        this.innerHTML = '<i class="fas fa-times mr-1"></i> Gagal Copy';
+        this.classList.remove('btn-outline-secondary');
+        this.classList.add('btn-danger');
+    }
+
+    setTimeout(() => {
+        this.innerHTML = originalHtml;
+        this.classList.remove('btn-success', 'btn-danger');
+        this.classList.add('btn-outline-secondary');
+    }, 2000);
+});
+
+document.getElementById('copyActivationRequestJsonBtn')?.addEventListener('click', async function () {
+    const originalHtml = this.innerHTML;
+    const copyText = this.dataset.copyText || '';
+
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(copyText);
+        } else {
+            const tempInput = document.createElement('textarea');
+            tempInput.value = copyText;
+            tempInput.setAttribute('readonly', 'readonly');
+            tempInput.style.position = 'absolute';
+            tempInput.style.left = '-9999px';
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+        }
+
+        this.innerHTML = '<i class="fas fa-check mr-1"></i> Tersalin';
+        this.classList.remove('btn-outline-secondary');
+        this.classList.add('btn-success');
+    } catch (error) {
+        this.innerHTML = '<i class="fas fa-times mr-1"></i> Gagal Copy';
+        this.classList.remove('btn-outline-secondary');
+        this.classList.add('btn-danger');
+    }
+
+    setTimeout(() => {
+        this.innerHTML = originalHtml;
+        this.classList.remove('btn-success', 'btn-danger');
+        this.classList.add('btn-outline-secondary');
+    }, 2000);
 });
 </script>
 @endpush
