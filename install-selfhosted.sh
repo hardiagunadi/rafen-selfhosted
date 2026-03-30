@@ -702,6 +702,27 @@ resolve_app_url() {
     printf 'http://%s' "$host"
 }
 
+resolve_access_mode() {
+    if [ -n "$APP_DOMAIN" ]; then
+        printf 'domain-based'
+        return
+    fi
+
+    if [ -n "$APP_URL_OVERRIDE" ]; then
+        case "$(normalize_host "$APP_URL_OVERRIDE")" in
+            ''|localhost|127.0.0.1)
+                printf 'ip-based'
+                ;;
+            *)
+                printf 'custom-url'
+                ;;
+        esac
+        return
+    fi
+
+    printf 'ip-based'
+}
+
 configure_environment() {
     normalize_sqlite_path
     local resolved_app_url
@@ -1164,8 +1185,25 @@ run_artisan_runtime_setup() {
 
 show_status() {
     normalize_sqlite_path
+    local access_mode
+    local access_mode_note
+
+    access_mode="$(resolve_access_mode)"
+    case "$access_mode" in
+        domain-based)
+            access_mode_note="Domain aktif. Mode ini cocok untuk akses publik dan HTTPS/SSL."
+            ;;
+        custom-url)
+            access_mode_note="Custom APP_URL aktif. Pastikan host ini memang bisa diakses client."
+            ;;
+        *)
+            access_mode_note="Fallback ke IP server. Cocok untuk LAN, VPN, atau akses internal tanpa domain."
+            ;;
+    esac
 
     printf 'Mode                 : %s\n' "$MODE"
+    printf 'Access Mode          : %s\n' "$access_mode"
+    printf 'Access Mode Note     : %s\n' "$access_mode_note"
     printf 'App Directory        : %s\n' "$APP_DIR"
     printf 'Env File             : %s\n' "$ENV_FILE"
     printf 'Env Exists           : %s\n' "$([ -f "$ENV_FILE" ] && printf yes || printf no)"
