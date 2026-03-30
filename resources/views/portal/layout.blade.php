@@ -8,33 +8,121 @@
     <meta name="theme-color" content="#0f6b95">
     <title>@yield('title', $systemSettings->portalName())</title>
     <link rel="manifest" href="{{ route('portal.manifest') }}">
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('branding/rafen-favicon.svg') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('branding/favicon-32.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ route('portal.icon', ['size' => 180]) }}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
     <style>
+        :root {
+            --brand-start: #0a3e68;
+            --brand-mid: #0f6b95;
+            --brand-end: #0c8a8f;
+        }
+
         body {
             background: #f4f7fb;
             min-height: 100vh;
+            font-family: 'Source Sans Pro', sans-serif;
         }
 
         .portal-navbar {
-            background: linear-gradient(105deg, #0a3e68 0%, #0f6b95 55%, #0c8a8f 100%);
+            background: linear-gradient(105deg, var(--brand-start) 0%, var(--brand-mid) 55%, var(--brand-end) 100%);
             box-shadow: 0 2px 8px rgba(10, 62, 104, .35);
+            padding: .7rem 1.25rem;
+        }
+
+        .portal-navbar .navbar-brand {
+            color: #fff !important;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .portal-navbar .brand-icon {
+            width: 36px;
+            height: 36px;
+            background: rgba(255, 255, 255, .18);
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
         }
 
         .portal-navbar .nav-link,
-        .portal-navbar .navbar-brand {
-            color: rgba(255, 255, 255, .9) !important;
+        .portal-navbar .btn-link.nav-link {
+            color: rgba(255, 255, 255, .8) !important;
+            text-decoration: none;
+            font-size: .875rem;
+            padding: .35rem .65rem !important;
+            border-radius: 6px;
+            transition: background .15s, color .15s;
+        }
+
+        .portal-navbar .nav-link:hover,
+        .portal-navbar .nav-link.active,
+        .portal-navbar .btn-link.nav-link:hover {
+            color: #fff !important;
+            background: rgba(255, 255, 255, .18);
         }
 
         .portal-navbar .nav-link.active {
-            font-weight: 700;
+            font-weight: 600;
+        }
+
+        .portal-navbar .btn-logout {
+            color: rgba(255, 255, 255, .75) !important;
+            border: 1px solid rgba(255, 255, 255, .3);
+            margin-left: .25rem;
         }
 
         .portal-main {
             max-width: 980px;
             margin: 0 auto;
-            padding: 1.5rem 1rem 2rem;
+            padding: 1.75rem 1rem 2rem;
+        }
+
+        .portal-main .card {
+            border: none;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, .07);
+            border-radius: 10px;
+        }
+
+        .portal-main .card-header {
+            border-radius: 10px 10px 0 0 !important;
+            font-weight: 600;
+            font-size: .92rem;
+            letter-spacing: .01em;
+        }
+
+        .portal-main .card-header.bg-primary,
+        .portal-main .card-header.bg-dark {
+            background: linear-gradient(90deg, var(--brand-start), var(--brand-mid)) !important;
+            color: #fff !important;
+            border-bottom: none;
+        }
+
+        .portal-main .btn-primary {
+            background: linear-gradient(90deg, var(--brand-mid), var(--brand-end));
+            border: none;
+        }
+
+        .portal-main .btn-primary:hover,
+        .portal-main .btn-primary:focus {
+            background: linear-gradient(90deg, var(--brand-start), var(--brand-mid));
+            border: none;
+        }
+
+        footer {
+            border-top: 1px solid #e2eaf4;
+            margin-top: 2rem;
+            color: #6b7a90;
+            font-size: .82rem;
+            padding: 1rem;
         }
     </style>
     @stack('css')
@@ -46,7 +134,8 @@
         <nav class="navbar navbar-expand navbar-dark portal-navbar">
             <div class="container">
                 <a href="{{ route('portal.dashboard') }}" class="navbar-brand font-weight-bold">
-                    <i class="fas fa-wifi mr-2"></i>{{ $systemSettings->portalName() }}
+                    <span class="brand-icon"><i class="fas fa-wifi"></i></span>
+                    <span>{{ $systemSettings->portalName() }}</span>
                 </a>
                 @if($hasPortalSession)
                     <ul class="navbar-nav ml-auto">
@@ -69,7 +158,7 @@
                         <li class="nav-item">
                             <form action="{{ route('portal.logout') }}" method="POST" class="mb-0">
                                 @csrf
-                                <button type="submit" class="btn btn-link nav-link">Keluar</button>
+                                <button type="submit" class="btn btn-link nav-link btn-logout">Keluar</button>
                             </form>
                         </li>
                     </ul>
@@ -89,6 +178,10 @@
 
         @yield('content')
     </main>
+
+    <footer class="text-center">
+        &copy; {{ date('Y') }} {{ $systemSettings->portalName() }}
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>

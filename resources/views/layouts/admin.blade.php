@@ -9,15 +9,197 @@
     <meta name="theme-color" content="#1367a4">
     <title>@yield('title', $systemSettings->appName(config('app.name', 'Rafen Self-Hosted')))</title>
     <link rel="manifest" href="{{ route('manifest.admin') }}">
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('branding/rafen-favicon.svg') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('branding/favicon-32.png') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ route('manifest.admin.icon', ['size' => 180]) }}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <style>
+        :root {
+            --app-bg: #f4f7fb;
+            --app-border: #d7e1ee;
+            --app-surface: #ffffff;
+            --app-shadow: 0 10px 22px rgba(15, 23, 42, 0.07);
+            --app-shadow-soft: 0 6px 14px rgba(15, 23, 42, 0.05);
+            --app-text: #0f172a;
+            --app-text-soft: #5b6b83;
+        }
+
+        body.layout-top-nav {
+            background:
+                radial-gradient(circle at 8% -8%, rgba(14, 116, 144, 0.1), transparent 30%),
+                radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.07), transparent 24%),
+                var(--app-bg);
+        }
+
+        .content-wrapper,
+        .content-wrapper > .content,
+        .content-wrapper > .content > .container,
+        .content-wrapper > .content > .container-fluid {
+            background: transparent;
+        }
+
+        .content-wrapper > .content {
+            padding-top: 0.8rem;
+            padding-bottom: 1rem;
+        }
+
+        .content-wrapper .card {
+            border: 1px solid var(--app-border);
+            border-radius: 16px;
+            box-shadow: var(--app-shadow-soft);
+            background: var(--app-surface);
+            overflow: hidden;
+        }
+
+        .content-wrapper .card-header {
+            border-bottom: 1px solid #e4ebf5;
+            background: linear-gradient(180deg, #fbfdff 0%, #f5f9ff 100%);
+            padding: 0.82rem 1rem;
+        }
+
+        .content-wrapper .card-title {
+            color: var(--app-text);
+            font-weight: 700;
+        }
+
+        .content-wrapper .card-body,
+        .content-wrapper .card-footer {
+            padding: 1rem;
+        }
+
+        .content-wrapper .card-footer {
+            border-top: 1px solid #e4ebf5;
+            background: #f8fbff;
+        }
+
+        .content-wrapper .form-control,
+        .content-wrapper .custom-select,
+        .content-wrapper .custom-file-label,
+        .content-wrapper .input-group-text {
+            border-radius: 8px;
+            border-color: #d4deea;
+        }
+
+        .content-wrapper .form-control:focus,
+        .content-wrapper .custom-select:focus {
+            border-color: #8fb5df;
+            box-shadow: 0 0 0 0.2rem rgba(19, 103, 164, 0.15);
+        }
+
+        .content-wrapper .table thead th {
+            border-top: 0;
+            border-bottom: 1px solid #dfe8f4;
+            background: #f8fbff;
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .content-wrapper .btn-primary {
+            background-color: #1367a4;
+            border-color: #1367a4;
+        }
+
+        .content-wrapper .btn-primary:hover,
+        .content-wrapper .btn-primary:focus {
+            background-color: #0f5689;
+            border-color: #0f5689;
+        }
+
+        .main-header.navbar {
+            border-bottom: 1px solid rgba(9, 39, 68, 0.22);
+            background: linear-gradient(105deg, rgba(10, 62, 104, 0.98), rgba(15, 107, 149, 0.95) 45%, rgba(12, 138, 143, 0.94)) !important;
+            box-shadow: 0 8px 20px rgba(9, 39, 68, 0.22);
+        }
+
+        .main-header .container {
+            max-width: 100%;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
+        .main-header .navbar-brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+            color: #f8fbff !important;
+            font-weight: 700;
+        }
+
+        .main-header .brand-logo-mark {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.55rem;
+            box-shadow: 0 8px 16px rgba(8, 23, 39, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            object-fit: contain;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 0.18rem;
+        }
+
+        .main-header .navbar-nav {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            scrollbar-width: thin;
+        }
+
+        .main-header .navbar-nav::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .main-header .navbar-nav::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.28);
+            border-radius: 999px;
+        }
+
+        .main-header .navbar-nav > .nav-link,
+        .main-header .navbar-nav > .nav-item > .nav-link,
+        .main-header .navbar-nav > .nav-item > form .btn {
+            color: #e7f5ff;
+            border-radius: 9px;
+            transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+            white-space: nowrap;
+        }
+
+        .main-header .navbar-nav > .nav-link:hover,
+        .main-header .navbar-nav > .nav-item > .nav-link:hover,
+        .main-header .navbar-nav > .nav-item > .nav-link:focus,
+        .main-header .navbar-nav > .nav-item > form .btn:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.16);
+            transform: translateY(-1px);
+        }
+
+        .main-header .navbar-nav > .nav-link.active,
+        .main-header .navbar-nav > .nav-item > .nav-link.active {
+            background: rgba(255, 255, 255, 0.18);
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        .main-header .navbar-nav > .nav-item > form .btn-outline-secondary,
+        .main-header .navbar-nav > .nav-item > button.btn-outline-secondary {
+            color: #e7f5ff;
+            border-color: rgba(255, 255, 255, 0.35);
+            background: transparent;
+        }
+
+        .alert {
+            border-radius: 14px;
+            box-shadow: var(--app-shadow-soft);
+        }
+    </style>
 </head>
 <body class="hold-transition layout-top-nav">
     <div class="wrapper">
         <nav class="main-header navbar navbar-expand-md navbar-light navbar-white">
             <div class="container">
                 <a href="{{ auth()->check() && ! auth()->user()->isSuperAdmin() ? route('shifts.my') : route('super-admin.dashboard') }}" class="navbar-brand">
+                    <img src="{{ asset('branding/rafen-mark.svg') }}" alt="RAFEN" class="brand-logo-mark">
                     <span class="brand-text font-weight-bold">{{ $systemSettings->appName('Rafen Self-Hosted') }}</span>
                 </a>
                 <div class="navbar-nav ml-auto align-items-center">
@@ -130,7 +312,9 @@
                         </div>
                     </div>
                 @endif
-                @yield('content')
+                <div class="container-fluid">
+                    @yield('content')
+                </div>
             </div>
         </div>
     </div>
