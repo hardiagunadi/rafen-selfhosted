@@ -116,12 +116,6 @@
             box-shadow: 0 8px 20px rgba(9, 39, 68, 0.22);
         }
 
-        .main-header .container {
-            max-width: 100%;
-            padding-left: 1rem;
-            padding-right: 1rem;
-        }
-
         .main-header .navbar-brand {
             display: inline-flex;
             align-items: center;
@@ -141,24 +135,10 @@
             padding: 0.18rem;
         }
 
-        .main-header .navbar-nav {
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            scrollbar-width: thin;
-        }
-
-        .main-header .navbar-nav::-webkit-scrollbar {
-            height: 6px;
-        }
-
-        .main-header .navbar-nav::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.28);
-            border-radius: 999px;
-        }
-
         .main-header .navbar-nav > .nav-link,
         .main-header .navbar-nav > .nav-item > .nav-link,
-        .main-header .navbar-nav > .nav-item > form .btn {
+        .main-header .navbar-nav > .nav-item > form .btn,
+        .main-header .navbar-nav > .nav-item > button.btn {
             color: #e7f5ff;
             border-radius: 9px;
             transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
@@ -168,7 +148,8 @@
         .main-header .navbar-nav > .nav-link:hover,
         .main-header .navbar-nav > .nav-item > .nav-link:hover,
         .main-header .navbar-nav > .nav-item > .nav-link:focus,
-        .main-header .navbar-nav > .nav-item > form .btn:hover {
+        .main-header .navbar-nav > .nav-item > form .btn:hover,
+        .main-header .navbar-nav > .nav-item > button.btn:hover {
             color: #ffffff;
             background: rgba(255, 255, 255, 0.16);
             transform: translateY(-1px);
@@ -188,86 +169,183 @@
             background: transparent;
         }
 
+        .main-sidebar.sidebar-modern {
+            position: relative;
+            border-right: 1px solid rgba(148, 163, 184, 0.24);
+            background: linear-gradient(180deg, #081527 0%, #0d2035 48%, #102a44 100%);
+        }
+
+        .main-sidebar.sidebar-modern::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background:
+                radial-gradient(circle at 18% 6%, rgba(56, 189, 248, 0.24), transparent 28%),
+                radial-gradient(circle at 85% 0%, rgba(14, 165, 233, 0.18), transparent 26%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 35%);
+        }
+
+        .sidebar-modern .brand-link,
+        .sidebar-modern .sidebar {
+            position: relative;
+            z-index: 1;
+        }
+
+        .sidebar-modern .brand-link {
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            background: linear-gradient(110deg, rgba(15, 118, 168, 0.35), rgba(14, 165, 233, 0.14));
+            padding-top: 0.95rem;
+            padding-bottom: 0.95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+        }
+
+        .sidebar-modern .brand-text {
+            color: #f8fbff;
+            font-weight: 700;
+            letter-spacing: 0.015em;
+            text-shadow: 0 2px 10px rgba(15, 23, 42, 0.35);
+        }
+
+        .sidebar-modern .brand-logo-mark {
+            width: 1.95rem;
+            height: 1.95rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 8px 16px rgba(8, 23, 39, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            object-fit: contain;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 0.18rem;
+        }
+
+        .sidebar-modern .sidebar {
+            height: calc(100% - 57px);
+            padding-top: 0.6rem;
+            overflow-y: auto;
+        }
+
+        .sidebar-modern .nav-sidebar .nav-link {
+            color: rgba(231, 245, 255, 0.88);
+            border-radius: 10px;
+            margin: 0.1rem 0.6rem;
+        }
+
+        .sidebar-modern .nav-sidebar .nav-link:hover,
+        .sidebar-modern .nav-sidebar .nav-link:focus {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.11);
+        }
+
+        .sidebar-modern .nav-sidebar .nav-link.active {
+            color: #ffffff;
+            background: linear-gradient(90deg, rgba(15, 107, 149, 0.78), rgba(12, 138, 143, 0.78));
+            box-shadow: 0 10px 20px rgba(2, 8, 23, 0.22);
+            font-weight: 700;
+        }
+
+        .sidebar-modern .nav-sidebar .nav-icon {
+            color: rgba(191, 219, 254, 0.95);
+        }
+
         .alert {
             border-radius: 14px;
             box-shadow: var(--app-shadow-soft);
         }
     </style>
 </head>
-<body class="hold-transition layout-top-nav">
+<body class="hold-transition sidebar-mini layout-fixed">
     <div class="wrapper">
-        <nav class="main-header navbar navbar-expand-md navbar-light navbar-white">
-            <div class="container">
-                <a href="{{ auth()->check() && ! auth()->user()->isSuperAdmin() ? route('shifts.my') : route('super-admin.dashboard') }}" class="navbar-brand">
-                    <img src="{{ asset('branding/rafen-mark.svg') }}" alt="RAFEN" class="brand-logo-mark">
-                    <span class="brand-text font-weight-bold">{{ $systemSettings->appName('Rafen Self-Hosted') }}</span>
-                </a>
-                <div class="navbar-nav ml-auto align-items-center">
-                    <a href="{{ auth()->check() && ! auth()->user()->isSuperAdmin() ? route('shifts.my') : route('super-admin.dashboard') }}" class="nav-link {{ request()->routeIs('super-admin.dashboard', 'shifts.my') ? 'active' : '' }}">Dashboard</a>
-                    <a href="{{ route('super-admin.users.index') }}" class="nav-link {{ request()->routeIs('super-admin.users.*') ? 'active' : '' }}">Pengguna</a>
-                    <a href="{{ route('shifts.my') }}" class="nav-link {{ request()->routeIs('shifts.*') ? 'active' : '' }}">Shift</a>
-                    <a href="{{ route('super-admin.settings.system.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.system.*') ? 'active' : '' }}">Profil Sistem</a>
-                    <a href="{{ route('super-admin.settings.license') }}" class="nav-link {{ request()->routeIs('super-admin.settings.license*') ? 'active' : '' }}">Lisensi Sistem</a>
-                    <a href="{{ route('super-admin.settings.mikrotik.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.mikrotik.*') ? 'active' : '' }}">MikroTik</a>
-                    @if(($systemFeatureFlags['radius'] ?? true) === true)
-                        <a href="{{ route('super-admin.settings.bandwidth-profiles.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.bandwidth-profiles.*') ? 'active' : '' }}">Bandwidth</a>
-                        <a href="{{ route('super-admin.settings.profile-groups.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.profile-groups.*') ? 'active' : '' }}">Profile Group</a>
-                        <a href="{{ route('super-admin.settings.ppp-profiles.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.ppp-profiles.*') ? 'active' : '' }}">Paket PPP</a>
-                        <a href="{{ route('super-admin.settings.ppp-users.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.ppp-users.*') ? 'active' : '' }}">Pelanggan PPP</a>
-                        <a href="{{ route('super-admin.odps.index') }}" class="nav-link {{ request()->routeIs('super-admin.odps.*') ? 'active' : '' }}">ODP</a>
-                        <a href="{{ route('super-admin.customer-map.index') }}" class="nav-link {{ request()->routeIs('super-admin.customer-map.*') ? 'active' : '' }}">Peta Pelanggan</a>
-                        <a href="{{ route('super-admin.settings.hotspot-profiles.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.hotspot-profiles.*') ? 'active' : '' }}">Paket Hotspot</a>
-                        <a href="{{ route('super-admin.settings.hotspot-users.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.hotspot-users.*') ? 'active' : '' }}">Pelanggan Hotspot</a>
-                        <a href="{{ route('super-admin.vouchers.index') }}" class="nav-link {{ request()->routeIs('super-admin.vouchers.*') ? 'active' : '' }}">Voucher</a>
-                        <a href="{{ route('super-admin.invoices.index') }}" class="nav-link {{ request()->routeIs('super-admin.invoices.*') ? 'active' : '' }}">Invoice</a>
-                        <a href="{{ route('super-admin.payments.index') }}" class="nav-link {{ request()->routeIs('super-admin.payments.*') ? 'active' : '' }}">Pembayaran</a>
-                        <a href="{{ route('teknisi-setoran.index') }}" class="nav-link {{ request()->routeIs('teknisi-setoran.*') ? 'active' : '' }}">Setoran Teknisi</a>
-                        <a href="{{ route('super-admin.reports.income') }}" class="nav-link {{ request()->routeIs('super-admin.reports.*') ? 'active' : '' }}">Laporan</a>
-                    @endif
-                    @if(($systemFeatureFlags['radius'] ?? true) === true)
-                        <a href="{{ route('super-admin.settings.radius-accounts.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.radius-accounts.*') ? 'active' : '' }}">Radius Accounts</a>
-                        <a href="{{ route('super-admin.sessions.pppoe') }}" class="nav-link {{ request()->routeIs('super-admin.sessions.pppoe*') ? 'active' : '' }}">Sesi PPP</a>
-                        <a href="{{ route('super-admin.sessions.hotspot') }}" class="nav-link {{ request()->routeIs('super-admin.sessions.hotspot*') ? 'active' : '' }}">Sesi Hotspot</a>
-                    @endif
-                    @if(($systemFeatureFlags['radius'] ?? true) === true)
-                        <a href="{{ route('super-admin.settings.freeradius.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.freeradius.*') ? 'active' : '' }}">FreeRADIUS</a>
-                    @endif
-                    @if(($systemFeatureFlags['genieacs'] ?? true) === true)
-                        <a href="{{ route('super-admin.settings.genieacs.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.genieacs.*') ? 'active' : '' }}">GenieACS</a>
-                        <a href="{{ route('super-admin.settings.cpe.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.cpe.*') ? 'active' : '' }}">CPE</a>
-                    @endif
-                    @if(($systemFeatureFlags['olt'] ?? true) === true)
-                        <a href="{{ route('super-admin.settings.olt.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.olt.*') ? 'active' : '' }}">OLT</a>
-                    @endif
-                    @if(($systemFeatureFlags['vpn'] ?? true) === true)
-                        <a href="{{ route('super-admin.settings.wireguard.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.wireguard.*') ? 'active' : '' }}">WireGuard</a>
-                    @endif
-                    @if(($systemFeatureFlags['wa'] ?? true) === true)
-                        <a href="{{ route('super-admin.settings.wa-gateway.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.wa-gateway.*') ? 'active' : '' }}">WhatsApp</a>
-                        <a href="{{ route('super-admin.wa-blast.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-blast.*') ? 'active' : '' }}">WA Blast</a>
-                        <a href="{{ route('super-admin.wa-chat.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-chat.*') ? 'active' : '' }}">WA Chat</a>
-                        <a href="{{ route('super-admin.wa-keyword-rules.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-keyword-rules.*') ? 'active' : '' }}">Keyword WA</a>
-                        <a href="{{ route('super-admin.wa-tickets.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-tickets.*') ? 'active' : '' }}">Tiket WA</a>
-                    @endif
-                    <a href="{{ route('super-admin.outages.index') }}" class="nav-link {{ request()->routeIs('super-admin.outages.*') ? 'active' : '' }}">Gangguan</a>
-                    <a href="{{ route('super-admin.logs.activity') }}" class="nav-link {{ request()->routeIs('super-admin.logs.*') ? 'active' : '' }}">Log Aktivitas</a>
-                    <a href="{{ route('super-admin.tools.backup') }}" class="nav-link {{ request()->routeIs('super-admin.tools.*') ? 'active' : '' }}">System Tools</a>
-                    <a href="{{ route('super-admin.terminal.index') }}" class="nav-link {{ request()->routeIs('super-admin.terminal.*') ? 'active' : '' }}">Terminal</a>
-                    <a href="{{ route('super-admin.help.index') }}" class="nav-link {{ request()->routeIs('super-admin.help.*') ? 'active' : '' }}">Bantuan</a>
-                    @if(config('push.vapid.public_key') !== '')
+        <nav class="main-header navbar navbar-expand navbar-light navbar-white">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
+                </li>
+            </ul>
+            <ul class="navbar-nav ml-auto align-items-center">
+                @if(config('push.vapid.public_key') !== '')
+                    <li class="nav-item">
                         <button id="push-subscribe-btn" type="button" class="btn btn-outline-secondary btn-sm ml-2" data-subscribed="0" title="Aktifkan notifikasi push">
                             <i class="far fa-bell"></i>
                         </button>
-                    @endif
-                    @auth
+                    </li>
+                @endif
+                @auth
+                    <li class="nav-item">
                         <form action="{{ route('logout') }}" method="POST" class="mb-0 ml-2">
                             @csrf
                             <button type="submit" class="btn btn-outline-secondary btn-sm">Logout</button>
                         </form>
-                    @endauth
-                </div>
-            </div>
+                    </li>
+                @endauth
+            </ul>
         </nav>
+
+        <aside class="main-sidebar sidebar-dark-primary elevation-4 sidebar-modern">
+            <a href="{{ auth()->check() && ! auth()->user()->isSuperAdmin() ? route('shifts.my') : route('super-admin.dashboard') }}" class="brand-link">
+                <img src="{{ asset('branding/rafen-mark.svg') }}" alt="RAFEN" class="brand-logo-mark">
+                <span class="brand-text font-weight-light">{{ $systemSettings->appName('Rafen Self-Hosted') }}</span>
+            </a>
+            <div class="sidebar">
+                <nav class="mt-2 pb-3">
+                    <ul class="nav nav-pills nav-sidebar flex-column" role="menu">
+                        <li class="nav-item"><a href="{{ auth()->check() && ! auth()->user()->isSuperAdmin() ? route('shifts.my') : route('super-admin.dashboard') }}" class="nav-link {{ request()->routeIs('super-admin.dashboard', 'shifts.my') ? 'active' : '' }}"><i class="nav-icon fas fa-tachometer-alt"></i><p>Dashboard</p></a></li>
+                        @if(($systemFeatureFlags['radius'] ?? true) === true)
+                            <li class="nav-item"><a href="{{ route('super-admin.sessions.pppoe') }}" class="nav-link {{ request()->routeIs('super-admin.sessions.pppoe*') ? 'active' : '' }}"><i class="nav-icon fas fa-signal"></i><p>Sesi PPP</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.sessions.hotspot') }}" class="nav-link {{ request()->routeIs('super-admin.sessions.hotspot*') ? 'active' : '' }}"><i class="nav-icon fas fa-broadcast-tower"></i><p>Sesi Hotspot</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.hotspot-users.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.hotspot-users.*') ? 'active' : '' }}"><i class="nav-icon fas fa-users"></i><p>Pelanggan Hotspot</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.ppp-users.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.ppp-users.*') ? 'active' : '' }}"><i class="nav-icon fas fa-user-friends"></i><p>Pelanggan PPP</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.vouchers.index') }}" class="nav-link {{ request()->routeIs('super-admin.vouchers.*') ? 'active' : '' }}"><i class="nav-icon fas fa-ticket-alt"></i><p>Voucher</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.customer-map.index') }}" class="nav-link {{ request()->routeIs('super-admin.customer-map.*') ? 'active' : '' }}"><i class="nav-icon fas fa-map-marked-alt"></i><p>Peta Pelanggan</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.odps.index') }}" class="nav-link {{ request()->routeIs('super-admin.odps.*') ? 'active' : '' }}"><i class="nav-icon fas fa-project-diagram"></i><p>ODP</p></a></li>
+                        @endif
+                        <li class="nav-item"><a href="{{ route('super-admin.settings.mikrotik.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.mikrotik.*') ? 'active' : '' }}"><i class="nav-icon fas fa-server"></i><p>MikroTik</p></a></li>
+                        @if(($systemFeatureFlags['olt'] ?? true) === true)
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.olt.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.olt.*') ? 'active' : '' }}"><i class="nav-icon fas fa-broadcast-tower"></i><p>OLT</p></a></li>
+                        @endif
+                        @if(($systemFeatureFlags['genieacs'] ?? true) === true)
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.cpe.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.cpe.*') ? 'active' : '' }}"><i class="nav-icon fas fa-network-wired"></i><p>CPE</p></a></li>
+                        @endif
+                        @if(($systemFeatureFlags['radius'] ?? true) === true)
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.bandwidth-profiles.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.bandwidth-profiles.*') ? 'active' : '' }}"><i class="nav-icon fas fa-tachometer-alt"></i><p>Bandwidth</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.profile-groups.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.profile-groups.*') ? 'active' : '' }}"><i class="nav-icon fas fa-layer-group"></i><p>Profile Group</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.hotspot-profiles.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.hotspot-profiles.*') ? 'active' : '' }}"><i class="nav-icon fas fa-box"></i><p>Paket Hotspot</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.ppp-profiles.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.ppp-profiles.*') ? 'active' : '' }}"><i class="nav-icon fas fa-box-open"></i><p>Paket PPP</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.invoices.index') }}" class="nav-link {{ request()->routeIs('super-admin.invoices.*') ? 'active' : '' }}"><i class="nav-icon fas fa-file-invoice"></i><p>Invoice</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.payments.index') }}" class="nav-link {{ request()->routeIs('super-admin.payments.*') ? 'active' : '' }}"><i class="nav-icon fas fa-cash-register"></i><p>Pembayaran</p></a></li>
+                            <li class="nav-item"><a href="{{ route('teknisi-setoran.index') }}" class="nav-link {{ request()->routeIs('teknisi-setoran.*') ? 'active' : '' }}"><i class="nav-icon fas fa-wallet"></i><p>Setoran Teknisi</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.reports.income') }}" class="nav-link {{ request()->routeIs('super-admin.reports.*') ? 'active' : '' }}"><i class="nav-icon fas fa-chart-line"></i><p>Laporan</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.radius-accounts.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.radius-accounts.*') ? 'active' : '' }}"><i class="nav-icon fas fa-id-card"></i><p>Radius Accounts</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.freeradius.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.freeradius.*') ? 'active' : '' }}"><i class="nav-icon fas fa-shield-alt"></i><p>FreeRADIUS</p></a></li>
+                        @endif
+                        @if(($systemFeatureFlags['genieacs'] ?? true) === true)
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.genieacs.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.genieacs.*') ? 'active' : '' }}"><i class="nav-icon fas fa-cogs"></i><p>GenieACS</p></a></li>
+                        @endif
+                        @if(($systemFeatureFlags['vpn'] ?? true) === true)
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.wireguard.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.wireguard.*') ? 'active' : '' }}"><i class="nav-icon fas fa-user-shield"></i><p>WireGuard</p></a></li>
+                        @endif
+                        @if(($systemFeatureFlags['wa'] ?? true) === true)
+                            <li class="nav-item"><a href="{{ route('super-admin.settings.wa-gateway.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.wa-gateway.*') ? 'active' : '' }}"><i class="nav-icon fab fa-whatsapp"></i><p>WhatsApp</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.wa-blast.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-blast.*') ? 'active' : '' }}"><i class="nav-icon fas fa-bullhorn"></i><p>WA Blast</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.wa-chat.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-chat.*') ? 'active' : '' }}"><i class="nav-icon fas fa-comments"></i><p>WA Chat</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.wa-keyword-rules.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-keyword-rules.*') ? 'active' : '' }}"><i class="nav-icon fas fa-key"></i><p>Keyword WA</p></a></li>
+                            <li class="nav-item"><a href="{{ route('super-admin.wa-tickets.index') }}" class="nav-link {{ request()->routeIs('super-admin.wa-tickets.*') ? 'active' : '' }}"><i class="nav-icon fas fa-life-ring"></i><p>Tiket WA</p></a></li>
+                        @endif
+                        <li class="nav-item"><a href="{{ route('super-admin.outages.index') }}" class="nav-link {{ request()->routeIs('super-admin.outages.*') ? 'active' : '' }}"><i class="nav-icon fas fa-exclamation-triangle"></i><p>Gangguan</p></a></li>
+                        <li class="nav-item"><a href="{{ route('shifts.my') }}" class="nav-link {{ request()->routeIs('shifts.*') ? 'active' : '' }}"><i class="nav-icon fas fa-user-clock"></i><p>Shift</p></a></li>
+                        <li class="nav-item"><a href="{{ route('super-admin.users.index') }}" class="nav-link {{ request()->routeIs('super-admin.users.*') ? 'active' : '' }}"><i class="nav-icon fas fa-user-cog"></i><p>Pengguna</p></a></li>
+                        <li class="nav-item"><a href="{{ route('super-admin.settings.system.index') }}" class="nav-link {{ request()->routeIs('super-admin.settings.system.*') ? 'active' : '' }}"><i class="nav-icon fas fa-cog"></i><p>Profil Sistem</p></a></li>
+                        <li class="nav-item"><a href="{{ route('super-admin.settings.license') }}" class="nav-link {{ request()->routeIs('super-admin.settings.license*') ? 'active' : '' }}"><i class="nav-icon fas fa-certificate"></i><p>Lisensi Sistem</p></a></li>
+                        <li class="nav-item"><a href="{{ route('super-admin.logs.activity') }}" class="nav-link {{ request()->routeIs('super-admin.logs.*') ? 'active' : '' }}"><i class="nav-icon fas fa-history"></i><p>Log Aktivitas</p></a></li>
+                        <li class="nav-item"><a href="{{ route('super-admin.tools.backup') }}" class="nav-link {{ request()->routeIs('super-admin.tools.*') ? 'active' : '' }}"><i class="nav-icon fas fa-toolbox"></i><p>System Tools</p></a></li>
+                        <li class="nav-item"><a href="{{ route('super-admin.terminal.index') }}" class="nav-link {{ request()->routeIs('super-admin.terminal.*') ? 'active' : '' }}"><i class="nav-icon fas fa-terminal"></i><p>Terminal</p></a></li>
+                        <li class="nav-item"><a href="{{ route('super-admin.help.index') }}" class="nav-link {{ request()->routeIs('super-admin.help.*') ? 'active' : '' }}"><i class="nav-icon fas fa-question-circle"></i><p>Bantuan</p></a></li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
 
         <div class="content-wrapper">
             <div class="content pt-3">
