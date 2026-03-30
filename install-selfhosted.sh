@@ -15,6 +15,8 @@ DEPLOY_PASSWORD="${DEPLOY_PASSWORD:-}"
 APP_USER="${APP_USER:-www-data}"
 APP_GROUP="${APP_GROUP:-www-data}"
 SYSTEM_TIMEZONE="${SYSTEM_TIMEZONE:-Asia/Jakarta}"
+PHP_PREFERRED_VERSION="${PHP_PREFERRED_VERSION:-8.4}"
+PHP_BIN_EXPLICIT="${PHP_BIN+x}"
 PHP_BIN="${PHP_BIN:-php}"
 COMPOSER_BIN="${COMPOSER_BIN:-composer}"
 NPM_BIN="${NPM_BIN:-npm}"
@@ -106,7 +108,7 @@ Options:
 
 Env overrides:
   APP_DIR, EXPECTED_APP_DIR, ENV_FILE, DEPLOY_USER, DEPLOY_GROUP, DEPLOY_PASSWORD,
-  APP_USER, APP_GROUP, SYSTEM_TIMEZONE,
+  APP_USER, APP_GROUP, SYSTEM_TIMEZONE, PHP_PREFERRED_VERSION,
   PHP_BIN, COMPOSER_BIN, NPM_BIN, APT_GET_BIN, SYSTEMCTL_BIN, VISUDO_BIN,
   NGINX_BIN, NGINX_SERVICE, ALLOW_NON_ROOT, RUN_COMPOSER_INSTALL, RUN_NPM_BUILD, RUN_MIGRATE,
   RUN_SUPER_ADMIN_SETUP, RUN_SYSTEM_BOOTSTRAP, RUN_WIREGUARD_SYSTEM_BOOTSTRAP, LICENSE_PUBLIC_KEY_VALUE,
@@ -251,6 +253,28 @@ require_root() {
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+resolve_php_cli_bin() {
+    if [ -n "$PHP_BIN_EXPLICIT" ] && [ -n "$PHP_BIN" ] && command_exists "$PHP_BIN"; then
+        printf '%s' "$PHP_BIN"
+        return
+    fi
+
+    if command_exists "php${PHP_PREFERRED_VERSION}"; then
+        printf 'php%s' "$PHP_PREFERRED_VERSION"
+        return
+    fi
+
+    printf 'php'
+}
+
+normalize_php_runtime() {
+    PHP_BIN="$(resolve_php_cli_bin)"
+}
+
+apt_package_exists() {
+    apt-cache show "$1" >/dev/null 2>&1
 }
 
 run_command() {
@@ -688,8 +712,13 @@ install_system_packages() {
     fi
 
     command_exists "$APT_GET_BIN" || fail "apt-get tidak ditemukan: $APT_GET_BIN"
+    command_exists apt-cache || fail "apt-cache tidak ditemukan."
 
     run_command "$APT_GET_BIN" update
+
+    apt_package_exists "php${PHP_PREFERRED_VERSION}" || fail "Paket php${PHP_PREFERRED_VERSION} tidak tersedia di apt repository server ini. Tambahkan repository PHP 8.4 terlebih dahulu, lalu jalankan installer lagi."
+    apt_package_exists "php${PHP_PREFERRED_VERSION}-fpm" || fail "Paket php${PHP_PREFERRED_VERSION}-fpm tidak tersedia di apt repository server ini. Tambahkan repository PHP 8.4 terlebih dahulu, lalu jalankan installer lagi."
+
     run_command "$APT_GET_BIN" install -y \
         nginx \
         git \
@@ -698,23 +727,28 @@ install_system_packages() {
         composer \
         nodejs \
         npm \
-        php \
-        php-cli \
-        php-fpm \
-        php-sqlite3 \
-        php-mysql \
-        php-curl \
-        php-mbstring \
-        php-xml \
-        php-zip \
-        php-bcmath \
-        php-intl \
-        php-gd
+        "php${PHP_PREFERRED_VERSION}" \
+        "php${PHP_PREFERRED_VERSION}-cli" \
+        "php${PHP_PREFERRED_VERSION}-fpm" \
+        "php${PHP_PREFERRED_VERSION}-sqlite3" \
+        "php${PHP_PREFERRED_VERSION}-mysql" \
+        "php${PHP_PREFERRED_VERSION}-curl" \
+        "php${PHP_PREFERRED_VERSION}-mbstring" \
+        "php${PHP_PREFERRED_VERSION}-xml" \
+        "php${PHP_PREFERRED_VERSION}-zip" \
+        "php${PHP_PREFERRED_VERSION}-bcmath" \
+        "php${PHP_PREFERRED_VERSION}-intl" \
+        "php${PHP_PREFERRED_VERSION}-gd"
 }
 
 detect_php_fpm_service() {
     if [ -n "$PHP_FPM_SERVICE" ]; then
         printf '%s' "$PHP_FPM_SERVICE"
+        return
+    fi
+
+    if [ -d "/etc/php/${PHP_PREFERRED_VERSION}/fpm" ]; then
+        printf 'php%s-fpm' "$PHP_PREFERRED_VERSION"
         return
     fi
 
@@ -732,6 +766,11 @@ detect_php_fpm_service() {
 detect_php_fpm_socket() {
     if [ -n "$PHP_FPM_SOCK" ]; then
         printf '%s' "$PHP_FPM_SOCK"
+        return
+    fi
+
+    if [ -S "/run/php/php${PHP_PREFERRED_VERSION}-fpm.sock" ]; then
+        printf '/run/php/php%s-fpm.sock' "$PHP_PREFERRED_VERSION"
         return
     fi
 
@@ -976,6 +1015,22 @@ composer_install() {
     run_in_app_as_installer_user "$COMPOSER_BIN" install --no-interaction --prefer-dist --optimize-autoloader
 }
 
+check_composer_platform_requirements() {
+    if [ "$RUN_COMPOSER_INSTALL" != "1" ]; then
+        return
+    fi
+
+    [ -f "$APP_DIR/composer.lock" ] || return
+
+    command_exists "$COMPOSER_BIN" || fail "Composer tidak ditemukan: $COMPOSER_BIN"
+
+    if run_in_app_as_installer_user "$COMPOSER_BIN" check-platform-reqs --lock --no-dev >/dev/null 2>&1; then
+        return
+    fi
+
+    fail "Platform PHP untuk user installer tidak cocok dengan composer.lock. Jalankan 'php -v' dan 'composer check-platform-reqs --lock --no-dev' sebagai user $(installer_exec_user). Dari log Anda, lock file saat ini membutuhkan PHP 8.4, sedangkan proses install tadi masih membaca PHP 8.3.6."
+}
+
 npm_build() {
     if [ "$RUN_NPM_BUILD" != "1" ]; then
         return
@@ -1061,6 +1116,8 @@ show_status() {
     printf 'WG System Bootstrap  : %s\n' "$RUN_WIREGUARD_SYSTEM_BOOTSTRAP"
     printf 'System Bootstrap     : %s\n' "$RUN_SYSTEM_BOOTSTRAP"
     printf 'Nginx Site           : %s\n' "$NGINX_SITE_AVAILABLE_PATH"
+    printf 'Preferred PHP        : %s\n' "$PHP_PREFERRED_VERSION"
+    printf 'PHP CLI Binary       : %s\n' "$(resolve_php_cli_bin)"
     printf 'PHP-FPM Service      : %s\n' "$(detect_php_fpm_service)"
     printf 'WG Helper Path       : %s\n' "$WG_SYNC_HELPER_PATH"
     printf 'WG System Service    : %s\n' "$WG_SYSTEM_SERVICE"
@@ -1068,6 +1125,7 @@ show_status() {
 
 run_install_or_deploy() {
     require_root
+    normalize_php_runtime
     ensure_deploy_user
     ensure_deploy_group_membership
     ensure_expected_app_dir
@@ -1079,6 +1137,7 @@ run_install_or_deploy() {
     prepare_app_for_deploy_user
     configure_timezone
     install_system_packages
+    check_composer_platform_requirements
     composer_install
     npm_build
     write_nginx_site_config
@@ -1101,6 +1160,7 @@ main() {
             run_install_or_deploy
             ;;
         status)
+            normalize_php_runtime
             ensure_app_layout
             show_status
             ;;
